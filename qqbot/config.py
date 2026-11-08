@@ -51,7 +51,7 @@ class Config:
 
 
 def load(path: str | Path | None = None) -> Config:
-    cfg_path = Path(path) if path else ROOT / "config.toml"
+    cfg_path = Path(path or os.getenv("QQBOT_CONFIG") or ROOT / "config.toml")
     if not cfg_path.exists():
         raise ConfigError(
             f"缺少配置文件：{cfg_path}\n复制 config.example.toml 为 config.toml 后填写"
@@ -75,6 +75,7 @@ def load(path: str | Path | None = None) -> Config:
     else:
         sandbox = bool(bot.get("sandbox", False))
 
+    bind = os.getenv("QQBOT_BIND")  # 容器内需要 0.0.0.0
     db_rel = paths.get("db", "data/qqbot.db")
     db_path = Path(db_rel) if Path(db_rel).is_absolute() else ROOT / db_rel
 
@@ -88,13 +89,13 @@ def load(path: str | Path | None = None) -> Config:
         db_path=db_path,
         source_path=cfg_path,
         at_all_template=str(msg.get("at_all_template", "<qqbot-at-everyone />")),
-        listen_host=str(hook.get("host", "127.0.0.1")),
+        listen_host=bind or str(hook.get("host", "127.0.0.1")),
         listen_port=int(hook.get("port", 18900)),
         webhook_path=str(hook.get("path", "/qqbot/webhook")),
         max_body=int(hook.get("max_body", 1 << 20)),
         log_events=bool(hook.get("log_events", True)),
         panel_enabled=bool(panel.get("enabled", True)),
-        panel_host=str(panel.get("host", "127.0.0.1")),
+        panel_host=bind or str(panel.get("host", "127.0.0.1")),
         panel_port=int(panel.get("port", 18901)),
         panel_password=os.getenv("QQBOT_PANEL_PASSWORD") or str(panel.get("password", "")),
         ssh_host=os.getenv("QQBOT_SSH_HOST") or str(srv.get("host", "")),

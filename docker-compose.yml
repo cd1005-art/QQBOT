@@ -1,0 +1,22 @@
+services:
+  qqbot:
+    build: .
+    image: qqbot:latest
+    container_name: qqbot
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      QQBOT_BIND: 0.0.0.0
+      QQBOT_CONFIG: /app/config/config.toml
+    ports:
+      - "127.0.0.1:18900:18900"   # webhook
+      - "127.0.0.1:18901:18901"   # panel api
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:18900/qqbot/webhook',timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

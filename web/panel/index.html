@@ -33,5 +33,15 @@
 <div class="toast" id="toast"></div>
 
 <script src="app.js"></script>
+<script>
+/* 未完成初始化：直接进引导页 */
+(async function () {
+  try {
+    const r = await fetch("/panel/api/setup/status");
+    const j = await r.json();
+    if (j.ok && j.data.needed) location.replace("setup.html");
+  } catch (e) { /* 忽略，交给 app.js 处理 */ }
+})();
+</script>
 </body>
 </html>

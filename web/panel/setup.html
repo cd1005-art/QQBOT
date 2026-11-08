@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>初始化 · QQBOT</title>
+<style>
+:root{--bg:#0e1116;--panel:#161b23;--line:#252c38;--text:#e7eaf2;--sub:#98a1b3;--muted:#6f7a8d;--accent:#4f8cff;--ok:#3fbf7f;--bad:#ff5d5d}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:radial-gradient(1100px 600px at 50% -10%,#16233a,#0e1116 55%);
+  color:var(--text);font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+  display:flex;align-items:center;justify-content:center;padding:24px}
+.box{width:min(520px,100%);background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:26px;
+  box-shadow:0 24px 70px rgba(0,0,0,.55)}
+h1{margin:0 0 4px;font-size:18px}
+.sub{color:var(--muted);font-size:12.5px;margin:0 0 20px}
+label{display:block;margin-bottom:14px}
+label span{display:block;color:var(--sub);font-size:12px;margin-bottom:5px}
+input{width:100%;background:#0d1219;border:1px solid var(--line);border-radius:8px;color:var(--text);
+  padding:9px 11px;font-size:13px;font-family:inherit;outline:none}
+input:focus{border-color:#33507f}
+button{width:100%;margin-top:6px;background:#1c3a72;border:1px solid #2b5299;color:#dbe8ff;border-radius:8px;
+  padding:10px;font-size:14px;cursor:pointer;font-family:inherit}
+button:hover{background:#22457f}
+button:disabled{opacity:.5;cursor:not-allowed}
+.hint{color:var(--muted);font-size:12px;margin-top:14px;line-height:1.8}
+.err{color:#ffc9cc;font-size:12.5px;margin-top:10px;min-height:18px}
+code{font-family:ui-monospace,Consolas,monospace;background:#0d1219;border:1px solid var(--line);
+  border-radius:5px;padding:1px 5px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>初始化 QQBOT</h1>
+  <p class="sub">首次启动需要三项信息，保存后立即生效，无需重启</p>
+
+  <label><span>AppID</span><input id="appid" placeholder="开放平台 → 开发设置"></label>
+  <label><span>AppSecret</span><input id="secret" type="password" placeholder="仅保存在本机 config.toml"></label>
+  <label><span>面板登录密码（≥6 位）</span><input id="pwd" type="password" placeholder="用于登录本控制台"></label>
+
+  <button id="btn" onclick="submitSetup()">保存并进入控制台</button>
+  <div class="err" id="err"></div>
+
+  <div class="hint">
+    还需要在 QQ 开放平台完成：<br>
+    1. 接入方式选 Webhook，回调地址填 <code id="hook">https://你的域名/qqbot/webhook</code><br>
+    2. 接收事件选「全部接收」<br>
+    3. 手机 QQ 群设置里把「群聊消息范围」改为获取全部消息<br>
+    4. 把机器人设为群管理员
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+async function submitSetup() {
+  const body = { app_id: $("#appid").value.trim(), app_secret: $("#secret").value.trim(),
+                 panel_password: $("#pwd").value };
+  $("#btn").disabled = true; $("#err").textContent = "";
+  try {
+    const r = await fetch("/panel/api/setup", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body) });
+    const j = await r.json();
+    if (j.ok) { location.replace("/panel/"); return; }
+    $("#err").textContent = j.error || "保存失败";
+  } catch (e) {
+    $("#err").textContent = "请求失败：" + e.message;
+  }
+  $("#btn").disabled = false;
+}
+(async function () {
+  const r = await fetch("/panel/api/setup/status");
+  const j = await r.json();
+  if (j.ok && !j.data.needed) { location.replace("/panel/"); return; }
+  $("#hook").textContent = location.origin + "/qqbot/webhook";
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+.git
+.gitignore
+.workbuddy
+data
+config.toml
+__pycache__
+*.pyc
+*.db
+*.log
+QQ机器人项目计划.txt
+PLAN.md
+README.md

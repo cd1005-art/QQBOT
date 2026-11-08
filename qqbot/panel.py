@@ -30,7 +30,7 @@ from .config import Config
 from .scheduler import CronError, next_after, parse as cron_parse
 from .store import Store
 
-STATIC = Path(__file__).resolve().parent.parent / "web"
+STATIC = Path(__file__).resolve().parent.parent / "web" / "panel"
 SESSION_TTL = 12 * 3600
 
 
@@ -95,6 +95,44 @@ class Panel:
         out["top"] = [dict(r) for r in self.store.top_members(g, 5)]
         out["stats"] = self.store.stats()
         return out
+
+    # ---------------- 首次配置 ----------------
+
+    def setup_status(self) -> dict:
+        missing = []
+        if not self.cfg.app_id:
+            missing.append("app_id")
+        if not self.cfg.app_secret:
+            missing.append("app_secret")
+        if not self.cfg.panel_password:
+            missing.append("panel_password")
+        return {"needed": bool(missing), "missing": missing,
+                "sandbox": self.cfg.sandbox, "config": str(self.cfg.source_path)}
+
+    def do_setup(self, body: dict) -> dict:
+        if not self.setup_status()["needed"]:
+            raise PermissionError("已完成初始化，如需修改请直接编辑 config.toml")
+        app_id = (body.get("app_id") or "").strip()
+        secret = (body.get("app_secret") or "").strip()
+        password = body.get("panel_password") or ""
+        if not app_id or not secret:
+            raise ValueError("AppID 与 AppSecret 必填")
+        if len(password) < 6:
+            raise ValueError("面板密码至少 6 位")
+
+        cfgedit.patch(self.cfg.source_path, "bot", "app_id", app_id)
+        cfgedit.patch(self.cfg.source_path, "bot", "app_secret", secret)
+        cfgedit.patch(self.cfg.source_path, "panel", "password", password)
+
+        # 热生效：cfg 与 token 缓存都是同一批对象，改完不用重启
+        self.cfg.app_id = app_id
+        self.cfg.app_secret = secret
+        self.cfg.panel_password = password
+        self.tokens.app_id = app_id
+        self.tokens.app_secret = secret
+        self.tokens._token = None
+        self.store.log_action("setup", None, None, json.dumps({"app_id": app_id}), True, "initialized")
+        return {"ok": True}
 
     # ---------------- P1：规则 / 定时 / 群设置 ----------------
 
@@ -311,6 +349,9 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/panel/api/health":
             self._json({"ok": True, "panel": True})
             return
+        if path == "/panel/api/setup/status":
+            self._json({"ok": True, "data": self.panel.setup_status()})
+            return
 
         if not path.startswith("/panel/api/"):
             self._send(404, b"not found", "text/plain")
@@ -370,6 +411,15 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
         p = self.panel
+
+        if path == "/panel/api/setup":
+            try:
+                self._json(p.do_setup(self._body()))
+            except PermissionError as exc:
+                self._json({"ok": False, "error": str(exc)}, 403)
+            except ValueError as exc:
+                self._json({"ok": False, "error": str(exc)}, 400)
+            return
 
         if path == "/panel/api/login":
             body = self._body()

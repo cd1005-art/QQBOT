@@ -175,9 +175,10 @@ def main(argv: list[str] | None = None) -> int:
     api = QQOpenAPI(cfg, tokens)
     try:
         signer = Signer(cfg.app_secret)
-    except ValueError as exc:
-        if args.cmd in ("serve", "check"):
-            print(f"[配置错误] {exc}", file=sys.stderr)
+    except ValueError:
+        # 未配置 AppSecret：check 需要签名，serve 仍要能起来（走初始化引导）
+        if args.cmd == "check":
+            print("[配置错误] 缺少 AppSecret，先完成初始化", file=sys.stderr)
             return 2
         signer = None  # type: ignore
 

@@ -16,6 +16,15 @@ QQ 平台 --HTTPS POST--> https://你的域名/qqbot/webhook
 
 面板静态资源由 nginx 直接读站点目录，只有 `/panel/api/` 反代到 Python。
 
+## 界面
+
+![控制台总览](docs/shots/panel.png)
+
+<p align="center">
+  <img src="docs/shots/landing.png" width="49%" alt="落地页">
+  <img src="docs/shots/docs.png" width="49%" alt="文档页">
+</p>
+
 ## 能力
 
 | 能力 | 状态 |
@@ -44,7 +53,9 @@ python -m qqbot check                # 本地模拟平台校验与事件推送
 python -m qqbot serve                # 同时启动 webhook(18900) 与面板(18901)
 ```
 
-打开 `http://127.0.0.1:18901/panel/` 登录。
+打开 `http://127.0.0.1:18901/panel/`。若 `app_id` / `app_secret` / 面板密码任一为空，会直接进入**初始化引导**，填完即写 `config.toml` 并热生效，不需要重启。
+
+初始化完成后再调 `/panel/api/setup` 一律返回 403，防止远程改写凭证。
 
 ## 平台侧配置
 
@@ -58,6 +69,24 @@ python -m qqbot serve                # 同时启动 webhook(18900) 与面板(189
 | 群内身份 | 机器人需设为群管理员 |
 
 保存回调地址时平台会立刻发 `op=13` 校验，服务没起来就保存失败。
+
+## Docker
+
+```bash
+docker compose up -d
+```
+
+等价的手写方式：
+
+```bash
+docker build -t qqbot:latest .
+docker run -d --name qqbot \
+  -p 127.0.0.1:18900:18900 -p 127.0.0.1:18901:18901 \
+  -v ./config:/app/config -v ./data:/app/data \
+  qqbot:latest
+```
+
+容器内监听 `0.0.0.0`（`QQBOT_BIND`），宿主机端口仍绑 `127.0.0.1`，对外统一由 nginx 进来。首次启动会自动从 `config.example.toml` 生成配置。
 
 ## 部署
 
@@ -161,11 +190,16 @@ seed = AppSecret 反复翻倍补到 32 字节
 ## 目录
 
 ```
-qqbot/          后端：配置 / 鉴权 / API / 验签 / 落库 / 事件 / webhook / 面板 / CLI
-web/            前端：index.html + app.css + app.js（原生，无构建）
-tests/smoke.py  离线测试：官方向量、落库、去重
-tools/deploy.py 一键部署（可选，含 SSH 上传）
+qqbot/          后端：配置 / 鉴权 / API / 验签 / 落库 / 事件 / webhook / 面板 / 规则 / 定时 / CLI
+web/panel/      控制台：index.html + app.css + app.js + setup.html（原生，无构建）
+web/landing.html 项目落地页
+web/docs.html    文档页
+docker/         entrypoint.sh
+docs/shots/     README 用截图
 deploy/         systemd 单元、nginx 片段
+Dockerfile / docker-compose.yml
+tests/smoke.py  离线测试：官方向量、落库、去重、cron、规则、调度
+tools/deploy.py 一键部署（可选，含 SSH 上传）
 PLAN.md         版本路线（P0 / P1 / P2）
 ```
 

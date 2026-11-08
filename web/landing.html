@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QQBOT · QQ 官方机器人群管理控制台</title>
+<meta name="description" content="用 QQ 开放平台官方能力做群管理：收事件、存证据、执行处置、留全痕。自托管，不接第三方协议端。">
+<style>
+:root{--bg:#0e1116;--panel:#161b23;--panel2:#1b2129;--line:#252c38;--text:#e7eaf2;--sub:#98a1b3;--muted:#6f7a8d;--accent:#4f8cff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.7 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+a{color:var(--accent);text-decoration:none}
+.wrap{max-width:1010px;margin:0 auto;padding:0 22px}
+header{position:sticky;top:0;z-index:10;background:rgba(14,17,22,.86);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.nav{display:flex;align-items:center;gap:18px;height:58px}
+.brand{font-weight:650;letter-spacing:.4px;display:flex;align-items:center;gap:9px}
+.logo{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,#4f8cff,#8a5cff)}
+.nav .sp{flex:1}
+.nav a.item{color:var(--sub);font-size:14px}
+.nav a.item:hover{color:var(--text)}
+.btn{display:inline-block;padding:8px 15px;border-radius:9px;border:1px solid var(--line);
+  background:var(--panel2);color:var(--text);font-size:14px}
+.btn:hover{border-color:#38425a}
+.btn.pri{background:#1c3a72;border-color:#2b5299;color:#dbe8ff}
+.btn.pri:hover{background:#22457f}
+
+.hero{padding:76px 0 52px;text-align:center;background:radial-gradient(900px 420px at 50% -12%,#17243a,#0e1116 62%)}
+.hero h1{font-size:36px;line-height:1.25;margin:0 0 14px;letter-spacing:-.5px}
+.hero p{color:var(--sub);max-width:640px;margin:0 auto 26px;font-size:15.5px}
+.hero .row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.badges{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:22px}
+.badge{font-size:12px;color:var(--sub);border:1px solid var(--line);border-radius:999px;padding:3px 10px;background:#12171f}
+
+section{padding:46px 0;border-top:1px solid var(--line)}
+h2{font-size:21px;margin:0 0 6px}
+.lead{color:var(--muted);font-size:13.5px;margin:0 0 22px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(238px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.card b{display:block;font-size:14.5px;margin-bottom:6px}
+.card p{margin:0;color:var(--sub);font-size:13px;line-height:1.65}
+
+pre{background:#0b0f16;border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow:auto;
+  font-size:12.5px;line-height:1.75;color:#cbd3e3;margin:0 0 12px}
+code{font-family:ui-monospace,Consolas,monospace}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:780px){.two{grid-template-columns:1fr}.hero h1{font-size:27px}.hero{padding:52px 0 38px}}
+.flow{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;overflow:auto}
+.flow pre{border:0;background:none;padding:0;margin:0;color:var(--sub);font-size:12.5px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}
+th{color:var(--muted);font-weight:500;font-size:12.5px}
+footer{border-top:1px solid var(--line);padding:26px 0 40px;color:var(--muted);font-size:12.5px;text-align:center}
+</style>
+</head>
+<body>
+
+<header><div class="wrap nav">
+  <div class="brand"><span class="logo"></span>QQBOT</div>
+  <span class="sp"></span>
+  <a class="item" href="/docs/">文档</a>
+  <a class="item" href="https://github.com/cd1005-art/qqbot">GitHub</a>
+  <a class="btn pri" href="/panel/">进入控制台</a>
+</div></header>
+
+<div class="hero">
+  <div class="wrap">
+    <h1>用官方能力做群管理<br>不靠协议端，不模拟客户端</h1>
+    <p>QQ 官方机器人的 Webhook 接入、事件落库、规则自动处置、定时任务与操作审计，打包成一个可自托管的小控制台。</p>
+    <div class="row">
+      <a class="btn pri" href="/panel/">打开控制台</a>
+      <a class="btn" href="/docs/">查看文档</a>
+    </div>
+    <div class="badges">
+      <span class="badge">Python 标准库</span>
+      <span class="badge">SQLite</span>
+      <span class="badge">无前端构建</span>
+      <span class="badge">MIT</span>
+    </div>
+  </div>
+</div>
+
+<section><div class="wrap">
+  <h2>能做什么</h2>
+  <p class="lead">全部走 QQ 开放平台官方接口，能力边界与平台权限一致</p>
+  <div class="grid">
+    <div class="card"><b>全量群消息</b><p>开启「获取群内全部消息」后，连非 @ 消息一起收，落库可查。</p></div>
+    <div class="card"><b>撤回 / 禁言 / 解禁</b><p>按消息逐条撤回，按成员禁言到分钟，全员禁言一键开关。</p></div>
+    <div class="card"><b>规则自动处置</b><p>关键词或正则命中，自动撤回、禁言或两者并行，按群生效。</p></div>
+    <div class="card"><b>定时任务</b><p>5 段 cron，到点向指定群发消息，执行结果留痕可追。</p></div>
+    <div class="card"><b>事件与审计</b><p>原始事件按类型留档，写操作逐条记录，可导出 CSV。</p></div>
+    <div class="card"><b>两道安全闸</b><p>dry_run 硬锁 + 群白名单，改配置才放行真实操作。</p></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>运行方式</h2>
+  <p class="lead">单进程双端口，静态资源由 nginx 直出</p>
+  <div class="flow"><pre>
+QQ 平台 ──HTTPS POST──> https://你的域名/qqbot/webhook
+                              │  nginx（443 / TLS）
+                              ▼
+                    127.0.0.1:18900  webhook 接收端（Ed25519 验签 → 异步落库）
+                    127.0.0.1:18901  面板 API
+                              │
+                              ▼
+                     SQLite：群 / 成员 / 消息 / 规则 / 定时 / 处置 / 审计 / 原始事件
+  </pre></div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>快速开始</h2>
+  <p class="lead">三分钟起一个能收事件的实例</p>
+  <div class="two">
+    <div>
+      <pre><code>git clone https://github.com/cd1005-art/qqbot.git
+cd qqbot
+python -m pip install -r requirements.txt
+cp config.example.toml config.toml
+# 或直接启动，首次访问会引导填写
+python -m qqbot serve</code></pre>
+      <p class="lead">启动后访问 <code>http://127.0.0.1:18901/panel/</code>，首次会进入初始化引导。</p>
+    </div>
+    <div>
+      <pre><code># Docker
+docker run -d --name qqbot \
+  -p 127.0.0.1:18900:18900 \
+  -p 127.0.0.1:18901:18901 \
+  -v $PWD/data:/app/data \
+  -v $PWD/config.toml:/app/config.toml \
+  ghcr.io/&lt;you&gt;/qqbot:latest</code></pre>
+      <p class="lead">镜像里已包含 Python 运行时与依赖，配置与数据挂载到宿主机。</p>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>能力边界</h2>
+  <p class="lead">平台不开放的部分，本项目如实标注，不做假动作</p>
+  <table>
+    <tr><th>能力</th><th style="width:120px">状态</th><th>说明</th></tr>
+    <tr><td>撤回 / 禁言 / 全员禁言 / 发消息</td><td>可用</td><td>需机器人为群管理员</td></tr>
+    <tr><td>@全体成员</td><td>可用</td><td>官方标签，每群每天 1 次</td></tr>
+    <tr><td>入群申请与审批</td><td>可用</td><td>需管理员身份</td></tr>
+    <tr><td>移出成员 / 群黑名单 / 成员列表</td><td>未开放</td><td>平台内邀接口，返回 11253</td></tr>
+  </table>
+</div></section>
+
+<footer>
+  QQBOT · MIT License · <a href="https://github.com/cd1005-art/qqbot">GitHub</a> · <a href="/docs/">文档</a>
+</footer>
+
+</body>
+</html>

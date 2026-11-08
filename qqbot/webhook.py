@@ -72,7 +72,7 @@ class _Server(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
-    def __init__(self, addr, handler, cfg: Config, signer: Signer, pipeline: _Pipeline):
+    def __init__(self, addr, handler, cfg: Config, signer: "Signer | None", pipeline: _Pipeline):
         super().__init__(addr, handler)
         self.cfg = cfg
         self.signer = signer
@@ -139,6 +139,10 @@ class _Handler(BaseHTTPRequestHandler):
             self._reply(400, b'{"ok":false}')
             return
 
+        if self.server.signer is None:
+            self._reply(503, b'{"ok":false,"error":"setup required"}')
+            return
+
         if payload.get("op") == 13:
             d = payload.get("d") or {}
             token_field = d.get("plain_token", "")
@@ -164,7 +168,7 @@ class _Handler(BaseHTTPRequestHandler):
         self._reply(200, b"{}")
 
 
-def serve(cfg: Config, store: Store, signer: Signer):
+def serve(cfg: Config, store: Store, signer: "Signer | None"):
     from .api import QQOpenAPI
     from .auth import TokenManager
     from .panel import build_server as build_panel
@@ -184,11 +188,14 @@ def serve(cfg: Config, store: Store, signer: Signer):
                       data.get("id") or "",
                       data.get("content") or "")
 
-    pipeline = _Pipeline(store, verbose=cfg.log_events, on_message=_on_message)
+    pipeline = _Pipeline(store, verbose=cfg.log_events,
+                        on_message=_on_message if cfg.has_credentials() else None)
     httpd = _Server((cfg.listen_host, cfg.listen_port), _Handler, cfg, signer, pipeline)
-    engine.start()
-    scheduler = Scheduler(cfg, store, api)
-    scheduler.start()
+    scheduler = None
+    if cfg.has_credentials():
+        engine.start()
+        scheduler = Scheduler(cfg, store, api)
+        scheduler.start()
 
     panel_httpd = None
     if cfg.panel_enabled:
@@ -209,8 +216,10 @@ def serve(cfg: Config, store: Store, signer: Signer):
     try:
         httpd.serve_forever(poll_interval=0.5)
     finally:
-        engine.stop()
-        scheduler.stop()
+        if engine:
+            engine.stop()
+        if scheduler:
+            scheduler.stop()
         pipeline.stop()
         httpd.server_close()
         if panel_httpd:

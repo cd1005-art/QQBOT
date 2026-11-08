@@ -24,7 +24,8 @@ FILES = [
     "qqbot/__init__.py", "qqbot/__main__.py", "qqbot/api.py", "qqbot/auth.py",
     "qqbot/config.py", "qqbot/ingest.py", "qqbot/sign.py", "qqbot/store.py",
     "qqbot/webhook.py", "qqbot/cli.py", "qqbot/panel.py", "qqbot/cfgedit.py", "qqbot/rules.py", "qqbot/scheduler.py",
-    "web/index.html", "web/app.css", "web/app.js",
+    "web/panel/index.html", "web/panel/app.css", "web/panel/app.js", "web/panel/setup.html",
+    "web/landing.html", "web/docs.html",
     "requirements.txt", "config.toml",
     "tests/smoke.py",
     "deploy/qqbot.service", "deploy/nginx-qqbot-webhook.conf",
@@ -72,7 +73,7 @@ def main() -> int:
             return 0
 
         print(f"== 上传到 {cfg.ssh_host}:{REMOTE} ==")
-        run(client, f"mkdir -p {REMOTE}/qqbot {REMOTE}/web {REMOTE}/tests {REMOTE}/deploy {REMOTE}/data")
+        run(client, f"mkdir -p {REMOTE}/qqbot {REMOTE}/web/panel {REMOTE}/tests {REMOTE}/deploy {REMOTE}/data")
         run(client, "mkdir -p /www/wwwroot/qqbot.oddpp.com/panel")
         sftp = client.open_sftp()
         for rel in FILES:
@@ -82,9 +83,13 @@ def main() -> int:
             print(f"  {rel}")
         sftp.chmod(f"{REMOTE}/config.toml", 0o600)
         # 前端同时铺到站点目录（nginx 直接读，不经过 Python）
-        for name in ("index.html", "app.css", "app.js"):
-            sftp.put(str(ROOT / "web" / name), f"/www/wwwroot/qqbot.oddpp.com/panel/{name}")
+        webroot = "/www/wwwroot/qqbot.oddpp.com"
+        for name in ("index.html", "app.css", "app.js", "setup.html"):
+            sftp.put(str(ROOT / "web" / "panel" / name), f"{webroot}/panel/{name}")
+        sftp.put(str(ROOT / "web" / "landing.html"), f"{webroot}/index.html")
+        sftp.put(str(ROOT / "web" / "docs.html"), f"{webroot}/docs.html")
         sftp.close()
+        run(client, f"mkdir -p {webroot}/docs && mv -f {webroot}/docs.html {webroot}/docs/index.html")
 
         print("== 依赖 ==")
         run(client, f"test -x {REMOTE}/venv/bin/python || python3 -m venv {REMOTE}/venv")

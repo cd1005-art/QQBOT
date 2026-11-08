@@ -1,0 +1,36 @@
+# 复制为 config.toml 后填写。config.toml 已在 .gitignore 中，不会被提交。
+
+[bot]
+app_id = ""
+# 建议留空，改用环境变量 QQBOT_APP_SECRET，避免凭证明文落盘
+app_secret = ""
+sandbox = false
+
+[safety]
+# 硬锁：true 时任何写操作只预览不执行。联调通过后再改 false
+dry_run = true
+# 群白名单（group_openid）。留空 = 不限制；生产环境建议填写
+allowed_groups = []
+timeout = 15
+
+[webhook]
+# 只监听回环，由同机 nginx 以 443 反代
+host = "127.0.0.1"
+port = 18900
+path = "/qqbot/webhook"
+max_body = 1048576
+log_events = true
+
+[panel]
+enabled = true
+host = "127.0.0.1"
+port = 18901
+# 面板登录密码，留空则拒绝登录
+password = ""
+
+[message]
+# 官方标签，纯文本 "@全体成员" 只会显示灰字、不触发提醒
+at_all_template = "<qqbot-at-everyone />"
+
+[paths]
+db = "data/qqbot.db"

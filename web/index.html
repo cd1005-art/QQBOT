@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e1116">
+<title>QQBOT 控制台</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<div id="login" class="hide">
+  <div class="login-box">
+    <h2>QQBOT 控制台</h2>
+    <p class="sub" id="loginHint">输入面板密码</p>
+    <input id="pwd" type="password" placeholder="password" autocomplete="current-password">
+    <button class="btn pri mt12" style="width:100%" onclick="doLogin()">登录</button>
+  </div>
+</div>
+
+<div class="layout hide" id="app">
+  <aside class="side">
+    <div class="brand"><span class="logo"></span><span>QQBOT<small>群管理控制台</small></span></div>
+    <nav class="nav" id="nav"></nav>
+    <div class="side-foot">
+      <div class="row"><span class="dot" id="dotState"></span><span id="botName">连接中…</span></div>
+      <div id="lockState"></div>
+    </div>
+  </aside>
+  <main class="main" id="main"></main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

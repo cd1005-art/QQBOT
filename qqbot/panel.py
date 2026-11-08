@@ -1,0 +1,390 @@
+"""Web 管理面板：标准库实现，无第三方框架。
+
+与 Webhook 接收端共用同一个进程、同一个 SQLite：
+    /qqbot/webhook  → 18900  收事件
+    /panel/         → 18901  管后台
+
+设计取舍：
+1. 不引 Flask/FastAPI，前端不引框架和 CDN，服务器断网也能用。
+2. 所有写操作走同一套 api.py，dry_run 硬锁在面板上同样生效。
+3. 会话用 HMAC 签名 Cookie，密钥由 AppSecret 派生，不落明文密码。
+"""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import hmac
+import json
+import threading
+import time
+import urllib.parse
+from datetime import datetime, timedelta
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+from . import cfgedit
+from .api import CST, MAX_MUTE_MINUTES, ApiError, QQOpenAPI, rfc3339
+from .auth import AuthError, TokenManager
+from .config import Config
+from .store import Store
+
+STATIC = Path(__file__).resolve().parent.parent / "web"
+SESSION_TTL = 12 * 3600
+
+
+class Panel:
+    def __init__(self, cfg: Config, store: Store, tokens: TokenManager, api: QQOpenAPI):
+        self.cfg = cfg
+        self.store = store
+        self.tokens = tokens
+        self.api = api
+        self._key = hashlib.sha256((cfg.app_secret or "no-secret").encode()).digest()
+
+    # ---------------- 会话 ----------------
+
+    def issue(self) -> str:
+        exp = str(int(time.time()) + SESSION_TTL).encode()
+        sig = hmac.new(self._key, exp, hashlib.sha256).hexdigest()[:32].encode()
+        return base64.urlsafe_b64encode(exp + b"." + sig).decode()
+
+    def valid(self, token: str) -> bool:
+        try:
+            raw = base64.urlsafe_b64decode(token.encode())
+            exp, sig = raw.split(b".", 1)
+            if int(exp) < time.time():
+                return False
+            return hmac.compare_digest(sig, hmac.new(self._key, exp, hashlib.sha256).hexdigest()[:32].encode())
+        except Exception:
+            return False
+
+    # ---------------- 数据 ----------------
+
+    def overview(self) -> dict:
+        info = {}
+        try:
+            _, me = self.api.bot_self()
+            info = {"name": me.get("username"), "id": me.get("id"), "avatar": me.get("avatar")}
+        except (ApiError, AuthError) as exc:
+            info = {"name": "未连接", "error": str(exc)}
+        return {
+            "bot": info,
+            "stats": self.store.stats(),
+            "dry_run": self.cfg.dry_run,
+            "sandbox": self.cfg.sandbox,
+            "groups": [dict(r) for r in self.store.list_groups()[:10]],
+            "events": [dict(r) for r in self.store.event_stream(12)],
+            "types": [dict(r) for r in self.store.event_types()[:10]],
+            "hourly": self.store.hourly_messages(None, 24),
+        }
+
+    def group_detail(self, g: str) -> dict:
+        out: dict = {"group_openid": g, "info": None, "state": None, "error": None}
+        try:
+            _, info = self.api.request("GET", f"/v2/groups/{g}/info")
+            out["info"] = info
+        except ApiError as exc:
+            out["error"] = str(exc)
+        try:
+            _, state = self.api.request("GET", f"/v2/groups/{g}/bot_state")
+            out["state"] = state
+        except ApiError as exc:
+            out["error"] = out["error"] or str(exc)
+        out["hourly"] = self.store.hourly_messages(g, 24)
+        out["top"] = [dict(r) for r in self.store.top_members(g, 5)]
+        out["stats"] = self.store.stats()
+        return out
+
+    def settings(self) -> dict:
+        return {
+            "app_id": self.cfg.app_id,
+            "app_secret": ("*" * 12 + self.cfg.app_secret[-4:]) if self.cfg.app_secret else "",
+            "sandbox": self.cfg.sandbox,
+            "dry_run": self.cfg.dry_run,
+            "allowed_groups": self.cfg.allowed_groups,
+            "at_all_template": self.cfg.at_all_template,
+            "listen": f"{self.cfg.listen_host}:{self.cfg.listen_port}{self.cfg.webhook_path}",
+            "panel": f"{self.cfg.panel_host}:{self.cfg.panel_port}",
+            "db": str(self.cfg.db_path),
+            "config": str(self.cfg.source_path),
+        }
+
+    def action(self, name: str, p: dict) -> dict:
+        if self.cfg.dry_run:
+            raise PermissionError("dry_run 硬锁开启，面板写操作被拒绝。请先改 config.toml 的 safety.dry_run")
+        g = p.get("group") or ""
+        if not g:
+            raise ValueError("缺少 group")
+        if self.cfg.allowed_groups and g not in self.cfg.allowed_groups:
+            raise PermissionError(f"群 {g} 不在 allowed_groups 白名单")
+
+        if name == "recall":
+            mid = p.get("message_id") or ""
+            if not mid:
+                row = self.store.last_message(g)
+                if not row:
+                    raise ValueError("该群没有可撤回消息")
+                mid = row["message_id"]
+            st, data = self.api.recall_message(g, mid)
+            self.store.mark_recalled(mid)
+            self.store.log_action("recall", g, mid, "{}", True, f"HTTP {st}")
+            return {"status": st, "message_id": mid}
+
+        if name in ("mute", "unmute"):
+            m = p.get("member") or ""
+            if not m:
+                raise ValueError("缺少 member")
+            if name == "mute":
+                minutes = int(p.get("minutes") or 60)
+                if not 1 <= minutes <= MAX_MUTE_MINUTES:
+                    raise ValueError(f"minutes 取值 1~{MAX_MUTE_MINUTES}")
+                st, data = self.api.mute_member(g, m, minutes)
+                body = {"members": [{"op": "add", "member_openid": m,
+                                     "mute_expire_at": rfc3339(datetime.now(CST) + timedelta(minutes=minutes))}]}
+            else:
+                st, data = self.api.unmute_member(g, m)
+                body = {"members": [{"op": "del", "member_openid": m, "mute_expire_at": ""}]}
+            self.store.log_action(name, g, m, json.dumps(body, ensure_ascii=False), True, f"HTTP {st}")
+            return {"status": st}
+
+        if name == "mute-all":
+            enable = bool(p.get("enable"))
+            st, data = self.api.mute_all(g, enable)
+            self.store.log_action("mute-all", g, None,
+                                  json.dumps({"global_rule": {"mode": "always" if enable else "none"}}),
+                                  True, f"HTTP {st}")
+            return {"status": st, "enabled": enable}
+
+        if name == "send":
+            text = (p.get("text") or "").strip()
+            if not text:
+                raise ValueError("内容为空")
+            st, data = self.api.send_message(g, text, p.get("message_id"))
+            self.store.log_action("send", g, None, json.dumps({"content": text}, ensure_ascii=False),
+                                  True, f"HTTP {st}")
+            return {"status": st, "id": data.get("id")}
+
+        if name == "at-all":
+            text = (p.get("text") or "").strip()
+            content = f"{self.cfg.at_all_template} {text}".strip()
+            st, data = self.api.send_message(g, content)
+            self.store.log_action("at-all", g, None, json.dumps({"content": content}, ensure_ascii=False),
+                                  True, f"HTTP {st}")
+            return {"status": st, "id": data.get("id")}
+
+        if name == "approve":
+            m = p.get("member") or ""
+            act = p.get("op") or "approve"
+            st, data = self.api.approval_join(g, m, act)
+            self.store.log_action("approve", g, m, json.dumps({"op": act}), True, f"HTTP {st}")
+            return {"status": st}
+
+        if name == "kick":
+            members = p.get("members") or ([p["member"]] if p.get("member") else [])
+            st, data = self.api.kick_members(g, members, bool(p.get("blacklist")))
+            self.store.log_action("kick", g, ",".join(members), "{}", True, f"HTTP {st}")
+            return {"status": st, "data": data}
+
+        raise ValueError(f"未知操作 {name}")
+
+    def joins(self, g: str) -> dict:
+        st, data = self.api.join_requests(g, "", 20)
+        return {"status": st, "data": data}
+
+
+class _Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+    server_version = "qqbot-panel/0.3"
+
+    def log_message(self, fmt, *args):
+        return
+
+    @property
+    def panel(self) -> Panel:
+        return self.server.panel
+
+    # ---------- 工具 ----------
+
+    def _send(self, code: int, body: bytes, ctype="application/json; charset=utf-8", cookie=None):
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        if cookie:
+            self.send_header("Set-Cookie", cookie)
+        self.end_headers()
+        if body:
+            self.wfile.write(body)
+
+    def _json(self, obj, code=200):
+        self._send(code, json.dumps(obj, ensure_ascii=False).encode())
+
+    def _cookie_token(self) -> str:
+        for part in (self.headers.get("Cookie") or "").split(";"):
+            if "=" in part:
+                k, v = part.strip().split("=", 1)
+                if k == "qqbot_sid":
+                    return v
+        return ""
+
+    def _authed(self) -> bool:
+        return self.panel.valid(self._cookie_token())
+
+    def _body(self) -> dict:
+        n = int(self.headers.get("Content-Length") or 0)
+        if n <= 0:
+            return {}
+        try:
+            return json.loads(self.rfile.read(n).decode("utf-8", "replace") or "{}")
+        except json.JSONDecodeError:
+            return {}
+
+    # ---------- 路由 ----------
+
+    def do_GET(self):
+        path = urllib.parse.urlparse(self.path).path
+        qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+
+        if path in ("/panel", "/panel/", "/panel/index.html"):
+            html = (STATIC / "index.html").read_bytes()
+            self._send(200, html, "text/html; charset=utf-8")
+            return
+        if path.startswith("/panel/") and not path.startswith("/panel/api/"):
+            name = path[len("/panel/"):] or "index.html"
+            f = (STATIC / name).resolve()
+            if f.is_file() and str(f).startswith(str(STATIC.resolve())):
+                ctype = {"css": "text/css; charset=utf-8",
+                         "js": "application/javascript; charset=utf-8",
+                         "html": "text/html; charset=utf-8"}.get(f.suffix.lstrip("."), "application/octet-stream")
+                self._send(200, f.read_bytes(), ctype)
+            else:
+                self._send(404, b"not found", "text/plain")
+            return
+        if path == "/panel/api/health":
+            self._json({"ok": True, "panel": True})
+            return
+
+        if not path.startswith("/panel/api/"):
+            self._send(404, b"not found", "text/plain")
+            return
+        if not self._authed():
+            self._json({"ok": False, "error": "unauthorized"}, 401)
+            return
+
+        p = self.panel
+        try:
+            if path == "/panel/api/overview":
+                self._json({"ok": True, "data": p.overview()})
+            elif path == "/panel/api/groups":
+                self._json({"ok": True, "data": [dict(r) for r in p.store.list_groups()]})
+            elif path.startswith("/panel/api/groups/") and path.endswith("/members"):
+                g = path.split("/")[4]
+                self._json({"ok": True, "data": [dict(r) for r in p.store.list_members(g, 200)]})
+            elif path.startswith("/panel/api/groups/") and path.endswith("/messages"):
+                g = path.split("/")[4]
+                q = qs.get("q", [""])[0]
+                n = int(qs.get("limit", ["50"])[0])
+                rows = (p.store.search_messages(g, q, n) if q else p.store.messages(g, n))
+                self._json({"ok": True, "data": [dict(r) for r in rows]})
+            elif path == "/panel/api/events":
+                t = qs.get("type", [None])[0]
+                n = int(qs.get("limit", ["50"])[0])
+                self._json({"ok": True, "data": [dict(r) for r in p.store.event_stream(n, t)]})
+            elif path == "/panel/api/audit":
+                self._json({"ok": True, "data": [dict(r) for r in p.store.recent_audit(int(qs.get("limit", ["50"])[0]))]})
+            elif path.startswith("/panel/api/groups/") and path.endswith("/stats"):
+                g = path.split("/")[4]
+                self._json({"ok": True, "data": p.group_detail(g)})
+            elif path == "/panel/api/settings":
+                self._json({"ok": True, "data": p.settings()})
+            elif path == "/panel/api/joins":
+                self._json({"ok": True, "data": p.joins(qs.get("group", [""])[0])})
+            elif path == "/panel/api/me":
+                self._json({"ok": True, "data": {"dry_run": p.cfg.dry_run,
+                                                 "allowed_groups": p.cfg.allowed_groups}})
+            else:
+                self._json({"ok": False, "error": "not found"}, 404)
+        except (ApiError, AuthError) as exc:
+            self._json({"ok": False, "error": str(exc)}, 400)
+        except Exception as exc:
+            self._json({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, 500)
+
+    def do_POST(self):
+        path = urllib.parse.urlparse(self.path).path
+        p = self.panel
+
+        if path == "/panel/api/login":
+            body = self._body()
+            if not p.cfg.panel_password:
+                self._json({"ok": False, "error": "未设置 panel.password，拒绝登录"}, 503)
+                return
+            if not hmac.compare_digest(str(body.get("password", "")), p.cfg.panel_password):
+                self._json({"ok": False, "error": "密码错误"}, 403)
+                return
+            cookie = (f"qqbot_sid={p.issue()}; Path=/panel; HttpOnly; "
+                      f"SameSite=Lax; Max-Age={SESSION_TTL}")
+            self._send(200, json.dumps({"ok": True}).encode(), cookie=cookie)
+            return
+
+        if not self._authed():
+            self._json({"ok": False, "error": "unauthorized"}, 401)
+            return
+
+        if path == "/panel/api/settings/password":
+            body = self._body()
+            old, new = str(body.get("old") or ""), str(body.get("new") or "")
+            if not hmac.compare_digest(old, p.cfg.panel_password):
+                self._json({"ok": False, "error": "原密码不正确"}, 403)
+                return
+            if len(new) < 6:
+                self._json({"ok": False, "error": "新密码至少 6 位"}, 400)
+                return
+            cfgedit.patch(p.cfg.source_path, "panel", "password", new)
+            p.cfg.panel_password = new
+            p.store.log_action("panel-password", None, None, "{}", True, "changed")
+            self._json({"ok": True})
+            return
+
+        if path == "/panel/api/settings/dry-run":
+            body = self._body()
+            enable = bool(body.get("enable"))
+            cfgedit.patch(p.cfg.source_path, "safety", "dry_run", enable)
+            p.cfg.dry_run = enable
+            p.store.log_action("dry-run", None, None, json.dumps({"enable": enable}), True, "changed")
+            self._json({"ok": True, "data": {"dry_run": enable}})
+            return
+
+        if path == "/panel/api/action":
+            body = self._body()
+            try:
+                data = p.action(body.get("action", ""), body)
+                self._json({"ok": True, "data": data})
+            except PermissionError as exc:
+                self._json({"ok": False, "error": str(exc)}, 403)
+            except ValueError as exc:
+                self._json({"ok": False, "error": str(exc)}, 400)
+            except (ApiError, AuthError) as exc:
+                self._json({"ok": False, "error": str(exc)}, 400)
+            except Exception as exc:
+                self._json({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, 500)
+            return
+
+        self._json({"ok": False, "error": "not found"}, 404)
+
+
+class _Server(ThreadingHTTPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+    def __init__(self, addr, handler, panel: Panel):
+        super().__init__(addr, handler)
+        self.panel = panel
+
+
+def build_server(cfg: Config, store: Store, tokens: TokenManager, api: QQOpenAPI) -> ThreadingHTTPServer:
+    """构造面板服务（不启动），由主进程负责线程与关停。"""
+    panel = Panel(cfg, store, tokens, api)
+    httpd = _Server((cfg.panel_host, cfg.panel_port), _Handler, panel)
+    if not cfg.panel_password:
+        print("[panel] 警告：未设置 panel.password，登录会被拒绝", flush=True)
+    return httpd

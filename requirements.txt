@@ -1,0 +1,3 @@
+# Webhook 验签依赖；Python 3.11+ 自带 tomllib，老版本用 tomli 兜底
+pynacl>=1.5
+tomli>=2.0; python_version < "3.11"

@@ -1,0 +1,26 @@
+# 本地配置与数据，绝不入库
+config.toml
+data/
+*.db
+*.db-wal
+*.db-shm
+*.log
+
+# 私有需求记录
+QQ机器人项目计划.txt
+
+# 运行时与缓存
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.cache/
+
+# 编辑器/系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 智能体工作区数据
+.workbuddy/

@@ -27,6 +27,7 @@ from . import cfgedit
 from .api import CST, MAX_MUTE_MINUTES, ApiError, QQOpenAPI, rfc3339
 from .auth import AuthError, TokenManager
 from .config import Config
+from .scheduler import CronError, next_after, parse as cron_parse
 from .store import Store
 
 STATIC = Path(__file__).resolve().parent.parent / "web"
@@ -94,6 +95,53 @@ class Panel:
         out["top"] = [dict(r) for r in self.store.top_members(g, 5)]
         out["stats"] = self.store.stats()
         return out
+
+    # ---------------- P1：规则 / 定时 / 群设置 ----------------
+
+    def create_rule(self, body: dict) -> dict:
+        name = (body.get("name") or "").strip()
+        match_type = body.get("match_type") or "contains"
+        pattern = (body.get("pattern") or "").strip()
+        action = body.get("action") or "recall"
+        minutes = int(body.get("minutes") or 10)
+        groups = [g for g in (body.get("groups") or []) if g]
+        if not name or not pattern:
+            raise ValueError("名称与匹配内容必填")
+        if match_type not in ("contains", "regex"):
+            raise ValueError("match_type 只能是 contains 或 regex")
+        if action not in ("recall", "mute", "recall_mute"):
+            raise ValueError("action 只能是 recall / mute / recall_mute")
+        if match_type == "regex":
+            import re as _re
+            try:
+                _re.compile(pattern)
+            except _re.error as exc:
+                raise ValueError(f"正则有误: {exc}")
+        if action in ("mute", "recall_mute") and not 1 <= minutes <= 43200:
+            raise ValueError("禁言时长 1~43200 分钟")
+
+        rid = self.store.add_rule(name, match_type, pattern, action,
+                                  json.dumps({"minutes": minutes}, ensure_ascii=False),
+                                  json.dumps(groups, ensure_ascii=False))
+        self.store.log_action("rule-add", None, str(rid), json.dumps(body, ensure_ascii=False), True, "created")
+        return {"id": rid}
+
+    def create_schedule(self, body: dict) -> dict:
+        name = (body.get("name") or "").strip()
+        cron = (body.get("cron") or "").strip()
+        text = (body.get("text") or "").strip()
+        groups = [g for g in (body.get("groups") or []) if g]
+        if not name or not cron or not text:
+            raise ValueError("名称、cron、内容都必填")
+        try:
+            cron_parse(cron)
+        except CronError as exc:
+            raise ValueError(f"cron 无效: {exc}")
+        sid = self.store.add_schedule(name, cron, text, json.dumps(groups, ensure_ascii=False))
+        nxt = next_after(cron)
+        self.store.finish_schedule(sid, nxt, "已排程")
+        self.store.log_action("schedule-add", None, str(sid), json.dumps(body, ensure_ascii=False), True, "created")
+        return {"id": sid, "next_run": nxt}
 
     def settings(self) -> dict:
         return {
@@ -295,6 +343,16 @@ class _Handler(BaseHTTPRequestHandler):
             elif path.startswith("/panel/api/groups/") and path.endswith("/stats"):
                 g = path.split("/")[4]
                 self._json({"ok": True, "data": p.group_detail(g)})
+            elif path == "/panel/api/rules":
+                self._json({"ok": True, "data": [dict(r) for r in p.store.list_rules()]})
+            elif path == "/panel/api/disposals":
+                self._json({"ok": True, "data": [dict(r) for r in
+                                                 p.store.recent_disposals(int(qs.get("limit", ["60"])[0]))]})
+            elif path == "/panel/api/schedules":
+                self._json({"ok": True, "data": [dict(r) for r in p.store.list_schedules()]})
+            elif path.startswith("/panel/api/groups/") and path.endswith("/setting"):
+                g = path.split("/")[4]
+                self._json({"ok": True, "data": p.store.get_group_setting(g)})
             elif path == "/panel/api/settings":
                 self._json({"ok": True, "data": p.settings()})
             elif path == "/panel/api/joins":
@@ -328,6 +386,78 @@ class _Handler(BaseHTTPRequestHandler):
 
         if not self._authed():
             self._json({"ok": False, "error": "unauthorized"}, 401)
+            return
+
+        if path == "/panel/api/rules":
+            try:
+                self._json({"ok": True, "data": p.create_rule(self._body())})
+            except ValueError as exc:
+                self._json({"ok": False, "error": str(exc)}, 400)
+            return
+
+        if path == "/panel/api/rules/toggle":
+            body = self._body()
+            p.store.set_rule_enabled(int(body.get("id") or 0), bool(body.get("enabled")))
+            self._json({"ok": True})
+            return
+
+        if path == "/panel/api/rules/delete":
+            body = self._body()
+            p.store.delete_rule(int(body.get("id") or 0))
+            p.store.log_action("rule-del", None, str(body.get("id")), "{}", True, "deleted")
+            self._json({"ok": True})
+            return
+
+        if path == "/panel/api/rules/test":
+            body = self._body()
+            from .rules import Engine as _E
+            rule = {"match_type": body.get("match_type") or "contains",
+                    "pattern": body.get("pattern") or ""}
+            text = body.get("text") or ""
+            try:
+                hit = _E.matches(rule, text)
+            except Exception as exc:
+                self._json({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, 400)
+                return
+            self._json({"ok": True, "data": {"hit": hit}})
+            return
+
+        if path == "/panel/api/schedules":
+            try:
+                self._json({"ok": True, "data": p.create_schedule(self._body())})
+            except ValueError as exc:
+                self._json({"ok": False, "error": str(exc)}, 400)
+            return
+
+        if path == "/panel/api/schedules/toggle":
+            body = self._body()
+            sid = int(body.get("id") or 0)
+            enabled = bool(body.get("enabled"))
+            p.store.set_schedule_enabled(sid, enabled)
+            if enabled:
+                for r in p.store.list_schedules():
+                    if r["id"] == sid:
+                        p.store.finish_schedule(sid, next_after(r["cron"]), r["last_result"] or "已排程")
+            self._json({"ok": True})
+            return
+
+        if path == "/panel/api/schedules/delete":
+            body = self._body()
+            p.store.delete_schedule(int(body.get("id") or 0))
+            p.store.log_action("schedule-del", None, str(body.get("id")), "{}", True, "deleted")
+            self._json({"ok": True})
+            return
+
+        if path == "/panel/api/groups/auto-rules":
+            body = self._body()
+            g = body.get("group") or ""
+            if not g:
+                self._json({"ok": False, "error": "缺少 group"}, 400)
+                return
+            p.store.set_group_auto_rules(g, bool(body.get("enabled")))
+            p.store.log_action("group-auto-rules", g, None,
+                               json.dumps({"enabled": body.get("enabled")}), True, "changed")
+            self._json({"ok": True})
             return
 
         if path == "/panel/api/settings/password":

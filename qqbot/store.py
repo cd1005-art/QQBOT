@@ -51,6 +51,57 @@ CREATE TABLE IF NOT EXISTS raw_events (
     received_at   INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_raw_events_type ON raw_events(event_type, received_at DESC);
+
+CREATE TABLE IF NOT EXISTS rules (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    match_type  TEXT NOT NULL,              -- contains | regex
+    pattern     TEXT NOT NULL,
+    action      TEXT NOT NULL,              -- recall | mute | recall_mute
+    params      TEXT NOT NULL DEFAULT '{}', -- {"minutes": 10}
+    groups      TEXT NOT NULL DEFAULT '[]', -- 空数组 = 全部群
+    enabled     INTEGER NOT NULL DEFAULT 1,
+    hits        INTEGER NOT NULL DEFAULT 0,
+    created_at  INTEGER NOT NULL,
+    last_hit_at INTEGER
+);
+CREATE TABLE IF NOT EXISTS disposals (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    rule_id       INTEGER,
+    group_openid  TEXT,
+    member_openid TEXT,
+    message_id    TEXT,
+    action        TEXT,
+    ok            INTEGER NOT NULL,
+    result        TEXT,
+    created_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_disposals_time ON disposals(created_at DESC);
+CREATE TABLE IF NOT EXISTS schedules (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    cron        TEXT NOT NULL,              -- 5 段 cron：分 时 日 月 周
+    text        TEXT NOT NULL,
+    groups      TEXT NOT NULL DEFAULT '[]',
+    enabled     INTEGER NOT NULL DEFAULT 1,
+    last_run    INTEGER,
+    next_run    INTEGER,
+    last_result TEXT,
+    created_at  INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS metrics_hourly (
+    bucket       INTEGER NOT NULL,
+    group_openid TEXT NOT NULL,
+    messages     INTEGER NOT NULL,
+    members      INTEGER NOT NULL,
+    PRIMARY KEY (bucket, group_openid)
+);
+CREATE TABLE IF NOT EXISTS group_settings (
+    group_openid TEXT PRIMARY KEY,
+    auto_rules   INTEGER NOT NULL DEFAULT 1,
+    note         TEXT,
+    updated_at   INTEGER NOT NULL
+);
 """
 
 
@@ -178,6 +229,122 @@ class Store:
         with self._conn() as conn:
             return conn.execute(
                 "SELECT event_type, payload FROM raw_events ORDER BY received_at").fetchall()
+
+    # ---------------- 规则 ----------------
+
+    def list_rules(self, enabled_only: bool = False) -> list[sqlite3.Row]:
+        sql = "SELECT * FROM rules"
+        if enabled_only:
+            sql += " WHERE enabled=1"
+        sql += " ORDER BY id DESC"
+        with self._conn() as conn:
+            return conn.execute(sql).fetchall()
+
+    def add_rule(self, name: str, match_type: str, pattern: str, action: str,
+                 params: str = "{}", groups: str = "[]", enabled: bool = True) -> int:
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO rules(name, match_type, pattern, action, params, groups, enabled, created_at) "
+                "VALUES(?,?,?,?,?,?,?,?)",
+                (name, match_type, pattern, action, params, groups, int(enabled), int(time.time())))
+            return int(cur.lastrowid)
+
+    def set_rule_enabled(self, rule_id: int, enabled: bool):
+        with self._conn() as conn:
+            conn.execute("UPDATE rules SET enabled=? WHERE id=?", (int(enabled), rule_id))
+
+    def delete_rule(self, rule_id: int):
+        with self._conn() as conn:
+            conn.execute("DELETE FROM rules WHERE id=?", (rule_id,))
+
+    def bump_rule(self, rule_id: int):
+        with self._conn() as conn:
+            conn.execute("UPDATE rules SET hits=hits+1, last_hit_at=? WHERE id=?",
+                         (int(time.time()), rule_id))
+
+    def log_disposal(self, rule_id: int | None, group_openid: str, member_openid: str | None,
+                     message_id: str | None, action: str, ok: bool, result: str):
+        with self._conn() as conn:
+            conn.execute(
+                "INSERT INTO disposals(rule_id, group_openid, member_openid, message_id, action, ok, result, created_at) "
+                "VALUES(?,?,?,?,?,?,?,?)",
+                (rule_id, group_openid, member_openid, message_id, action, int(ok), result, int(time.time())))
+
+    def recent_disposals(self, limit: int = 50) -> list[sqlite3.Row]:
+        with self._conn() as conn:
+            return conn.execute(
+                "SELECT * FROM disposals ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+
+    # ---------------- 定时任务 ----------------
+
+    def list_schedules(self) -> list[sqlite3.Row]:
+        with self._conn() as conn:
+            return conn.execute("SELECT * FROM schedules ORDER BY id DESC").fetchall()
+
+    def add_schedule(self, name: str, cron: str, text: str, groups: str = "[]",
+                     enabled: bool = True) -> int:
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO schedules(name, cron, text, groups, enabled, created_at) VALUES(?,?,?,?,?,?)",
+                (name, cron, text, groups, int(enabled), int(time.time())))
+            return int(cur.lastrowid)
+
+    def set_schedule_enabled(self, sid: int, enabled: bool):
+        with self._conn() as conn:
+            conn.execute("UPDATE schedules SET enabled=? WHERE id=?", (int(enabled), sid))
+
+    def delete_schedule(self, sid: int):
+        with self._conn() as conn:
+            conn.execute("DELETE FROM schedules WHERE id=?", (sid,))
+
+    def finish_schedule(self, sid: int, next_run: int | None, result: str):
+        with self._conn() as conn:
+            conn.execute("UPDATE schedules SET last_run=?, next_run=?, last_result=? WHERE id=?",
+                         (int(time.time()), next_run, result, sid))
+
+    def due_schedules(self, now: int) -> list[sqlite3.Row]:
+        with self._conn() as conn:
+            return conn.execute(
+                "SELECT * FROM schedules WHERE enabled=1 AND next_run IS NOT NULL AND next_run<=?",
+                (now,)).fetchall()
+
+    # ---------------- 群设置 ----------------
+
+    def get_group_setting(self, group_openid: str) -> dict:
+        with self._conn() as conn:
+            row = conn.execute("SELECT * FROM group_settings WHERE group_openid=?",
+                               (group_openid,)).fetchone()
+        return dict(row) if row else {"group_openid": group_openid, "auto_rules": 1, "note": None}
+
+    def set_group_auto_rules(self, group_openid: str, enabled: bool):
+        with self._conn() as conn:
+            conn.execute(
+                "INSERT INTO group_settings(group_openid, auto_rules, updated_at) VALUES(?,?,?) "
+                "ON CONFLICT(group_openid) DO UPDATE SET auto_rules=excluded.auto_rules, "
+                "updated_at=excluded.updated_at",
+                (group_openid, int(enabled), int(time.time())))
+
+    # ---------------- 统计聚合 ----------------
+
+    def upsert_metrics(self, bucket: int, group_openid: str, messages: int, members: int):
+        with self._conn() as conn:
+            conn.execute(
+                "INSERT INTO metrics_hourly(bucket, group_openid, messages, members) VALUES(?,?,?,?) "
+                "ON CONFLICT(bucket, group_openid) DO UPDATE SET messages=excluded.messages, "
+                "members=excluded.members",
+                (bucket, group_openid, messages, members))
+
+    def aggregate_hours(self, hours: int = 48):
+        """把最近 N 小时的消息量写进 metrics_hourly，供长期统计。"""
+        now_bucket = int(time.time() // 3600) * 3600
+        start = now_bucket - hours * 3600
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT (created_at/3600)*3600 AS b, group_openid, COUNT(*) AS n, "
+                "COUNT(DISTINCT member_openid) AS m FROM messages WHERE created_at>=? "
+                "GROUP BY b, group_openid", (start,)).fetchall()
+        for r in rows:
+            self.upsert_metrics(int(r["b"]), r["group_openid"], int(r["n"]), int(r["m"]))
 
     def stats(self) -> dict:
         with self._conn() as conn:

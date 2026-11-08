@@ -23,7 +23,7 @@ NGINX_EXT = "/www/server/panel/vhost/nginx/extension/qqbot.oddpp.com"
 FILES = [
     "qqbot/__init__.py", "qqbot/__main__.py", "qqbot/api.py", "qqbot/auth.py",
     "qqbot/config.py", "qqbot/ingest.py", "qqbot/sign.py", "qqbot/store.py",
-    "qqbot/webhook.py", "qqbot/cli.py", "qqbot/panel.py", "qqbot/cfgedit.py",
+    "qqbot/webhook.py", "qqbot/cli.py", "qqbot/panel.py", "qqbot/cfgedit.py", "qqbot/rules.py", "qqbot/scheduler.py",
     "web/index.html", "web/app.css", "web/app.js",
     "requirements.txt", "config.toml",
     "tests/smoke.py",

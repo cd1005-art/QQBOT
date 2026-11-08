@@ -113,8 +113,8 @@ function lineChart(data, opt = {}) {
 const ROUTES = [
   { id: "dashboard", name: "总览", ico: "▦" },
   { id: "groups", name: "群管理", ico: "◉" },
-  { id: "rules", name: "规则", ico: "⚑", soon: true },
-  { id: "schedules", name: "定时", ico: "◷", soon: true },
+  { id: "rules", name: "规则", ico: "⚑" },
+  { id: "schedules", name: "定时", ico: "◷" },
   { id: "events", name: "事件", ico: "≡" },
   { id: "audit", name: "审计", ico: "✓" },
   { id: "settings", name: "设置", ico: "⚙" },
@@ -129,8 +129,8 @@ async function route() {
   const id = (location.hash.replace(/^#\/?/, "") || "dashboard").split("/")[0];
   $$("#nav a").forEach(a => a.classList.toggle("on", a.getAttribute("href") === `#/${id}`));
   if (state.timer) { clearInterval(state.timer); state.timer = null; }
-  const fn = { dashboard: viewDashboard, groups: viewGroups, rules: viewPlaceholder("rules"),
-    schedules: viewPlaceholder("schedules"), events: viewEvents, audit: viewAudit, settings: viewSettings }[id];
+  const fn = { dashboard: viewDashboard, groups: viewGroups, rules: viewRules,
+    schedules: viewSchedules, events: viewEvents, audit: viewAudit, settings: viewSettings }[id];
   await (fn || viewDashboard)();
 }
 
@@ -251,8 +251,12 @@ async function loadGroup() {
 }
 
 async function groupOverview(g) {
-  const j = await api(`/panel/api/groups/${g}/stats`);
+  const [j, setting] = await Promise.all([
+    api(`/panel/api/groups/${g}/stats`),
+    api(`/panel/api/groups/${g}/setting`),
+  ]);
   const d = j.ok ? j.data : {};
+  const autoOn = setting.ok ? !!setting.data.auto_rules : true;
   const info = d.info || {}, st = d.state || {};
   $("#gbody").innerHTML = `
     <div class="panel-b">
@@ -269,6 +273,13 @@ async function groupOverview(g) {
         <div class="mono" style="color:var(--muted);font-size:11.5px;max-width:320px;text-align:right">${esc(g)}</div>
       </div>
       ${d.error ? `<div class="mt12 badge warn">${esc(d.error)}</div>` : ""}
+      <div class="mt12 row" style="border-top:1px solid var(--line);padding-top:12px">
+        <span style="font-size:12.5px;color:var(--sub)">自动处置规则</span>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12.5px">
+          <input type="checkbox" id="autoRules" style="width:auto" onchange="toggleGroupRules(this.checked)">
+          对本群生效</label>
+        <span class="hint" style="color:var(--muted);font-size:12px" id="autoRulesHint"></span>
+      </div>
     </div>
     <div style="border-top:1px solid var(--line)">${lineChart(d.hourly || [], { height: 130 })}</div>
     <div class="panel-b" style="border-top:1px solid var(--line)">
@@ -355,9 +366,28 @@ async function searchMsgs() {
 }
 
 async function groupDisposal(g) {
-  const j = await api("/panel/api/audit?limit=100");
+  const j = await api("/panel/api/disposals?limit=100");
   const rows = (j.ok ? j.data : []).filter(r => r.group_openid === g);
-  $("#gbody").innerHTML = rows.length ? auditTable(rows) : empty("该群暂无处置记录");
+  $("#gbody").innerHTML = rows.length ? disposalTable(rows) : empty("该群暂无自动处置记录", "命中规则后在这里留痕");
+}
+
+function disposalTable(rows) {
+  return `<table><thead><tr><th style="width:96px">时间</th><th style="width:70px">规则</th>
+    <th>成员</th><th style="width:100px">动作</th><th style="width:70px">结果</th><th>详情</th></tr></thead><tbody>
+    ${rows.map(d => `<tr><td style="color:var(--muted)">${ts(d.created_at)}</td>
+      <td class="num">#${d.rule_id ?? "-"}</td>
+      <td class="mono" style="color:var(--muted)">${esc((d.member_openid || "-").slice(0, 10))}…</td>
+      <td>${esc(d.action)}</td>
+      <td>${d.ok ? '<span class="badge ok">成功</span>' : '<span class="badge warn">未执行/失败</span>'}</td>
+      <td style="color:var(--muted);font-size:12px">${esc(d.result || "")}</td></tr>`).join("")}
+  </tbody></table>`;
+}
+
+async function toggleGroupRules(enabled) {
+  const j = await api("/panel/api/groups/auto-rules", { method: "POST",
+    body: JSON.stringify({ group: state.group, enabled }) });
+  if (j.ok) toast(`本群自动处置已${enabled ? "开启" : "关闭"}`, "ok");
+  else { toast(j.error || "操作失败", "bad"); $("#autoRules").checked = !enabled; }
 }
 
 /* ---------------- 事件 ---------------- */
@@ -508,31 +538,175 @@ async function changePw() {
   else toast(j.error || "修改失败", "bad");
 }
 
-/* ---------------- 占位页 ---------------- */
+/* ---------------- 规则 ---------------- */
 
-function viewPlaceholder(kind) {
-  return async function () {
-    const conf = {
-      rules: {
-        title: "规则（自动处置）", badge: "P1 第一优先",
-        items: ["关键词命中自动撤回", "正则匹配 + 频率阈值", "命中后自动禁言 N 分钟", "按群独立启用与白名单", "每次处置写入 disposals 留痕"],
-      },
-      schedules: {
-        title: "定时任务", badge: "P1 第二优先",
-        items: ["每日固定时间发文本公告", "指定多个目标群", "Cron 表达式与下次执行预览", "执行历史与失败原因", "失败重试与告警"],
-      },
-    }[kind];
-    $("#main").innerHTML = `
-      <div class="topbar"><h1>${conf.title}</h1><span class="badge info">${conf.badge}</span></div>
-      <div class="panel"><div class="panel-b">
-        <div style="color:var(--sub);margin-bottom:12px">本页为 P0 占位，P1 阶段落地。计划包含：</div>
-        <ul style="margin:0;padding-left:20px;color:var(--text);line-height:2">
-          ${conf.items.map(t => `<li>${esc(t)}</li>`).join("")}
-        </ul>
-        <div class="hint mt16" style="color:var(--muted);font-size:12px">
-          数据表已预留：${kind === "rules" ? "rules / disposals" : "schedules"}。</div>
-      </div></div>`;
-  };
+async function viewRules() {
+  $("#main").innerHTML = `<div class="topbar"><h1>规则</h1><span class="sp"></span>
+    <span class="meta">命中即处置，处置结果写入「处置记录」</span>
+    <button class="btn pri" onclick="toggleRuleForm()">新建规则</button></div>
+    <div class="panel hide" id="ruleForm"><div class="panel-h">新建规则</div><div class="panel-b">
+      <div class="row" style="align-items:flex-end">
+        <label class="field grow" style="margin:0"><span>名称</span><input id="rName" placeholder="例如：广告词拦截"></label>
+        <label class="field" style="margin:0;width:130px"><span>匹配方式</span>
+          <select id="rType"><option value="contains">包含</option><option value="regex">正则</option></select></label>
+        <label class="field grow" style="margin:0"><span>匹配内容</span><input id="rPattern" placeholder="广告 / 加群 / https?://"></label>
+        <label class="field" style="margin:0;width:150px"><span>动作</span>
+          <select id="rAction" onchange="syncMinutes()"><option value="recall">撤回</option>
+          <option value="mute">禁言</option><option value="recall_mute">撤回 + 禁言</option></select></label>
+        <label class="field" style="margin:0;width:110px"><span>禁言分钟</span><input id="rMinutes" value="10" disabled></label>
+      </div>
+      <div class="mt12" style="font-size:12px;color:var(--sub);margin-bottom:6px">作用群（不勾选 = 全部群）</div>
+      <div id="rGroups" class="row" style="gap:14px"></div>
+      <div class="row mt12">
+        <input id="rTestText" class="grow" placeholder="测试文本：粘贴一段话验证是否命中">
+        <button class="btn" onclick="testRule()">测试命中</button>
+        <button class="btn pri" onclick="createRule()">保存规则</button>
+      </div>
+      <div class="hint mt8" id="rTestOut" style="font-size:12px;color:var(--muted)"></div>
+    </div></div>
+    <div class="panel"><div class="flush" id="ruleBox">${skeleton(4)}</div></div>`;
+  const g = await api("/panel/api/groups");
+  state.groups = g.ok ? g.data : [];
+  $("#rGroups").innerHTML = state.groups.length
+    ? state.groups.map(x => `<label style="display:flex;gap:6px;align-items:center;font-size:12.5px">
+        <input type="checkbox" class="rg" value="${esc(x.group_openid)}" style="width:auto">
+        <span class="mono">${esc(x.group_openid.slice(0, 12))}…</span></label>`).join("")
+    : '<span class="hint" style="color:var(--muted);font-size:12px">暂无群</span>';
+  loadRules();
+}
+
+function toggleRuleForm() { $("#ruleForm").classList.toggle("hide"); }
+function syncMinutes() {
+  const a = $("#rAction").value;
+  $("#rMinutes").disabled = a === "recall";
+}
+function ruleGroups() { return $$(".rg:checked").map(x => x.value); }
+
+async function testRule() {
+  const j = await api("/panel/api/rules/test", { method: "POST", body: JSON.stringify({
+    match_type: $("#rType").value, pattern: $("#rPattern").value, text: $("#rTestText").value }) });
+  $("#rTestOut").innerHTML = j.ok
+    ? (j.data.hit ? '<span class="badge ok">命中</span>' : '<span class="badge">未命中</span>')
+    : `<span class="badge bad">${esc(j.error)}</span>`;
+}
+
+async function createRule() {
+  const body = { name: $("#rName").value.trim(), match_type: $("#rType").value,
+    pattern: $("#rPattern").value.trim(), action: $("#rAction").value,
+    minutes: parseInt($("#rMinutes").value || "10", 10), groups: ruleGroups() };
+  const j = await api("/panel/api/rules", { method: "POST", body: JSON.stringify(body) });
+  if (j.ok) { toast("规则已创建", "ok"); $("#ruleForm").classList.add("hide"); loadRules(); }
+  else toast(j.error || "创建失败", "bad");
+}
+
+const ACTION_TEXT = { recall: "撤回", mute: "禁言", recall_mute: "撤回+禁言" };
+
+async function loadRules() {
+  const j = await api("/panel/api/rules");
+  const rows = j.ok ? j.data : [];
+  if (!rows.length) { $("#ruleBox").innerHTML = empty("还没有规则", "点右上角「新建规则」开始"); return; }
+  $("#ruleBox").innerHTML = `<table><thead><tr><th>名称</th><th style="width:80px">方式</th>
+    <th>匹配</th><th style="width:100px">动作</th><th style="width:110px">作用群</th>
+    <th style="width:64px">命中</th><th style="width:90px">最近</th><th style="width:130px">操作</th></tr></thead><tbody>
+    ${rows.map(r => {
+      const groups = safeJson(r.groups, []);
+      const params = safeJson(r.params, {});
+      return `<tr>
+        <td>${esc(r.name)}</td>
+        <td>${r.match_type === "regex" ? "正则" : "包含"}</td>
+        <td class="mono">${esc(r.pattern)}</td>
+        <td>${ACTION_TEXT[r.action] || esc(r.action)}${r.action !== "recall" ? `<span class="muted" style="font-size:11px"> ${params.minutes || 10}m</span>` : ""}</td>
+        <td style="color:var(--muted);font-size:12px">${groups.length ? groups.length + " 个群" : "全部"}</td>
+        <td class="num">${r.hits}</td>
+        <td style="color:var(--muted)">${r.last_hit_at ? ago(r.last_hit_at) : "-"}</td>
+        <td><button class="btn sm" onclick="toggleRule(${r.id},${r.enabled ? 0 : 1})">${r.enabled ? "停用" : "启用"}</button>
+            <button class="btn sm bad" onclick="delRule(${r.id},'${esc(r.name)}')">删除</button></td>
+      </tr>`;
+    }).join("")}
+  </tbody></table>`;
+}
+function safeJson(s, d) { try { return JSON.parse(s); } catch (e) { return d; } }
+
+async function toggleRule(id, enabled) {
+  const j = await api("/panel/api/rules/toggle", { method: "POST", body: JSON.stringify({ id, enabled: !!enabled }) });
+  if (j.ok) { toast("已更新", "ok"); loadRules(); } else toast(j.error || "失败", "bad");
+}
+async function delRule(id, name) {
+  if (!await confirmBox("删除规则", `确认删除「${name}」？历史处置记录保留。`, true)) return;
+  const j = await api("/panel/api/rules/delete", { method: "POST", body: JSON.stringify({ id }) });
+  if (j.ok) { toast("已删除", "ok"); loadRules(); } else toast(j.error || "失败", "bad");
+}
+
+/* ---------------- 定时 ---------------- */
+
+async function viewSchedules() {
+  $("#main").innerHTML = `<div class="topbar"><h1>定时任务</h1><span class="sp"></span>
+    <span class="meta">cron 五段：分 时 日 月 周</span>
+    <button class="btn pri" onclick="toggleSchedForm()">新建任务</button></div>
+    <div class="panel hide" id="schedForm"><div class="panel-h">新建任务</div><div class="panel-b">
+      <div class="row" style="align-items:flex-end">
+        <label class="field grow" style="margin:0"><span>名称</span><input id="sName" placeholder="每日公告"></label>
+        <label class="field" style="margin:0;width:180px"><span>cron</span><input id="sCron" value="0 9 * * *"></label>
+        <label class="field grow" style="margin:0"><span>发送内容</span><input id="sText" placeholder="今天维护，请提前下线"></label>
+      </div>
+      <div class="hint mt8" style="font-size:12px;color:var(--muted)">
+        示例：<code>0 9 * * *</code> 每天 09:00　<code>*/30 * * * *</code> 每 30 分钟　<code>0 9 * * 1-5</code> 工作日 09:00</div>
+      <div class="mt12" style="font-size:12px;color:var(--sub);margin-bottom:6px">目标群（不勾选 = 库内全部群）</div>
+      <div id="sGroups" class="row" style="gap:14px"></div>
+      <div class="row mt12"><button class="btn pri" onclick="createSchedule()">保存任务</button></div>
+    </div></div>
+    <div class="panel"><div class="flush" id="schedBox">${skeleton(4)}</div></div>`;
+  const g = await api("/panel/api/groups");
+  state.groups = g.ok ? g.data : [];
+  $("#sGroups").innerHTML = state.groups.length
+    ? state.groups.map(x => `<label style="display:flex;gap:6px;align-items:center;font-size:12.5px">
+        <input type="checkbox" class="sg" value="${esc(x.group_openid)}" style="width:auto">
+        <span class="mono">${esc(x.group_openid.slice(0, 12))}…</span></label>`).join("")
+    : '<span class="hint" style="color:var(--muted);font-size:12px">暂无群</span>';
+  loadSchedules();
+}
+
+function toggleSchedForm() { $("#schedForm").classList.toggle("hide"); }
+
+async function createSchedule() {
+  const body = { name: $("#sName").value.trim(), cron: $("#sCron").value.trim(),
+    text: $("#sText").value.trim(), groups: $$(".sg:checked").map(x => x.value) };
+  const j = await api("/panel/api/schedules", { method: "POST", body: JSON.stringify(body) });
+  if (j.ok) { toast("任务已创建", "ok"); $("#schedForm").classList.add("hide"); loadSchedules(); }
+  else toast(j.error || "创建失败", "bad");
+}
+
+async function loadSchedules() {
+  const j = await api("/panel/api/schedules");
+  const rows = j.ok ? j.data : [];
+  if (!rows.length) { $("#schedBox").innerHTML = empty("还没有定时任务"); return; }
+  $("#schedBox").innerHTML = `<table><thead><tr><th>名称</th><th style="width:120px">cron</th>
+    <th>内容</th><th style="width:90px">目标群</th><th style="width:130px">下次执行</th>
+    <th style="width:140px">上次结果</th><th style="width:120px">操作</th></tr></thead><tbody>
+    ${rows.map(r => {
+      const groups = safeJson(r.groups, []);
+      return `<tr>
+        <td>${esc(r.name)}</td>
+        <td><code class="mono">${esc(r.cron)}</code></td>
+        <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.text)}</td>
+        <td style="color:var(--muted);font-size:12px">${groups.length ? groups.length + " 个群" : "全部"}</td>
+        <td style="color:var(--muted)">${r.enabled ? (r.next_run ? ts(r.next_run) : "待排程") : '<span class="badge">已停用</span>'}</td>
+        <td style="color:var(--muted);font-size:12px">${esc(r.last_result || "-")}</td>
+        <td><button class="btn sm" onclick="toggleSched(${r.id},${r.enabled ? 0 : 1})">${r.enabled ? "停用" : "启用"}</button>
+            <button class="btn sm bad" onclick="delSched(${r.id},'${esc(r.name)}')">删除</button></td>
+      </tr>`;
+    }).join("")}
+  </tbody></table>`;
+}
+
+async function toggleSched(id, enabled) {
+  const j = await api("/panel/api/schedules/toggle", { method: "POST", body: JSON.stringify({ id, enabled: !!enabled }) });
+  if (j.ok) { toast("已更新", "ok"); loadSchedules(); } else toast(j.error || "失败", "bad");
+}
+async function delSched(id, name) {
+  if (!await confirmBox("删除任务", `确认删除「${name}」？`, true)) return;
+  const j = await api("/panel/api/schedules/delete", { method: "POST", body: JSON.stringify({ id }) });
+  if (j.ok) { toast("已删除", "ok"); loadSchedules(); } else toast(j.error || "失败", "bad");
 }
 
 /* ---------------- 动作 ---------------- */

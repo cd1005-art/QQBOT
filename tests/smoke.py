@@ -12,7 +12,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from datetime import datetime  # noqa: E402
+
+from qqbot.config import Config  # noqa: E402
 from qqbot.ingest import ingest  # noqa: E402
+from qqbot.rules import Engine  # noqa: E402
+from qqbot.scheduler import CronError, match, next_after, parse  # noqa: E402
 from qqbot.sign import Signer, derive_seed  # noqa: E402
 from qqbot.store import Store  # noqa: E402
 
@@ -60,15 +65,68 @@ def check_recall(store: Store):
     return "撤回标记与审计 通过"
 
 
+def check_cron():
+    assert parse("0 9 * * *")[0] == {0} and parse("0 9 * * *")[1] == {9}
+    assert match("0 9 * * 1-5", datetime(2026, 11, 9, 9, 0))       # 周一
+    assert not match("0 9 * * 1-5", datetime(2026, 11, 8, 9, 0))  # 周日
+    assert match("*/30 * * * *", datetime(2026, 11, 8, 10, 30))
+    assert not match("*/30 * * * *", datetime(2026, 11, 8, 10, 31))
+    nxt = next_after("0 9 * * *", datetime(2026, 11, 8, 10, 0))
+    assert nxt is not None and datetime.fromtimestamp(nxt).hour == 9
+    try:
+        parse("bad")
+        raise AssertionError("非法 cron 应当抛错")
+    except CronError:
+        pass
+    return "cron 解析 / 匹配 / 下一次时间 通过"
+
+
+def check_rules(store: Store):
+    rid = store.add_rule("广告拦截", "contains", "加群", "recall_mute",
+                         '{"minutes": 5}', "[]")
+    rule = [dict(r) for r in store.list_rules() if r["id"] == rid][0]
+    assert Engine.matches(rule, "快来加群领福利"), "包含匹配失败"
+    assert not Engine.matches(rule, "今天天气不错")
+    r2 = {"match_type": "regex", "pattern": r"https?://\S+"}
+    assert Engine.matches(r2, "看这个 http://a.b/c"), "正则匹配失败"
+    assert not Engine.matches({"match_type": "regex", "pattern": "["}, "任意"), "非法正则应返回 False"
+
+    cfg = Config(app_id="x", app_secret="y", dry_run=True)
+    eng = Engine(cfg, store, api=None)  # dry_run 下不会调用 api
+    eng._evaluate("G1", "M1", "MSG-RULE", "快来加群领福利")
+    ds = store.recent_disposals(5)
+    assert ds and ds[0]["rule_id"] == rid and "dry_run" in (ds[0]["result"] or ""), ds
+    assert [dict(r) for r in store.list_rules() if r["id"] == rid][0]["hits"] == 1
+    return "规则匹配 / 命中计数 / dry_run 留痕 通过"
+
+
+def check_schedules(store: Store):
+    sid = store.add_schedule("每日公告", "0 9 * * *", "早上好")
+    assert any(r["id"] == sid for r in store.list_schedules())
+    store.finish_schedule(sid, 0, "已排程")
+    due = [r for r in store.due_schedules(10) if r["id"] == sid]
+    assert due, "到期任务未被捞出"
+    store.set_schedule_enabled(sid, False)
+    assert not [r for r in store.due_schedules(10) if r["id"] == sid], "停用后不应到期"
+    store.aggregate_hours(48)
+    return "定时任务存取 / 到期判定 / 指标聚合 通过"
+
+
 def main() -> int:
     msg1 = check_signature()
+    msg_cron = check_cron()
     with tempfile.TemporaryDirectory() as tmp:
         store = Store(Path(tmp) / "t.db")
         msg2 = check_ingest(store)
         msg3 = check_recall(store)
+        msg4 = check_rules(store)
+        msg5 = check_schedules(store)
     print(msg1)
     print(msg2)
     print(msg3)
+    print(msg_cron)
+    print(msg4)
+    print(msg5)
     print("smoke ok")
     return 0
 

@@ -25,9 +25,10 @@ from .store import Store
 class _Pipeline:
     """接收线程 → 队列 → 单写线程，SQLite 只有一个写者，避免锁竞争。"""
 
-    def __init__(self, store: Store, verbose: bool = True):
+    def __init__(self, store: Store, verbose: bool = True, on_message=None):
         self.store = store
         self.verbose = verbose
+        self.on_message = on_message
         self.q: queue.Queue = queue.Queue(maxsize=20000)
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="writer", daemon=True)
@@ -57,6 +58,11 @@ class _Pipeline:
                 continue
             if self.verbose and line:
                 print(line, flush=True)
+            if self.on_message and event in ("GROUP_MESSAGE_CREATE", "GROUP_AT_MESSAGE_CREATE"):
+                try:
+                    self.on_message(event, data)
+                except Exception as exc:
+                    print(f"[rules] 提交失败: {type(exc).__name__}: {exc}", flush=True)
 
     def stop(self):
         self._stop.set()
@@ -163,13 +169,30 @@ def serve(cfg: Config, store: Store, signer: Signer):
     from .auth import TokenManager
     from .panel import build_server as build_panel
 
-    pipeline = _Pipeline(store, verbose=cfg.log_events)
+    from .rules import Engine
+    from .scheduler import Scheduler
+
+    tokens = TokenManager(cfg.app_id, cfg.app_secret, cfg.timeout)
+    api = QQOpenAPI(cfg, tokens)
+
+    engine = Engine(cfg, store, api)
+
+    def _on_message(event: str, data: dict):
+        engine.submit(data.get("group_openid") or "",
+                      ((data.get("author") or {}).get("member_openid")
+                       or (data.get("author") or {}).get("id") or ""),
+                      data.get("id") or "",
+                      data.get("content") or "")
+
+    pipeline = _Pipeline(store, verbose=cfg.log_events, on_message=_on_message)
     httpd = _Server((cfg.listen_host, cfg.listen_port), _Handler, cfg, signer, pipeline)
+    engine.start()
+    scheduler = Scheduler(cfg, store, api)
+    scheduler.start()
 
     panel_httpd = None
     if cfg.panel_enabled:
-        tokens = TokenManager(cfg.app_id, cfg.app_secret, cfg.timeout)
-        panel_httpd = build_panel(cfg, store, tokens, QQOpenAPI(cfg, tokens))
+        panel_httpd = build_panel(cfg, store, tokens, api)
         threading.Thread(target=panel_httpd.serve_forever, kwargs={"poll_interval": 0.5},
                          daemon=True).start()
         print(f"[panel] 管理面板 http://{cfg.panel_host}:{cfg.panel_port}/panel/", flush=True)
@@ -186,6 +209,8 @@ def serve(cfg: Config, store: Store, signer: Signer):
     try:
         httpd.serve_forever(poll_interval=0.5)
     finally:
+        engine.stop()
+        scheduler.stop()
         pipeline.stop()
         httpd.server_close()
         if panel_httpd:

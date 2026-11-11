@@ -82,7 +82,13 @@ def main() -> int:
         run(client, f"mkdir -p {REMOTE}/qqbot {REMOTE}/web/panel {REMOTE}/tests {REMOTE}/deploy {REMOTE}/data")
         run(client, "mkdir -p /www/wwwroot/qqbot.oddpp.com/panel")
         sftp = client.open_sftp()
-        for rel in FILES:
+        files = list(FILES)
+        for py in sorted((ROOT / "qqbot").glob("*.py")):
+            rel = py.relative_to(ROOT).as_posix()
+            if rel not in files:
+                files.append(rel)
+
+        for rel in files:
             if rel == "config.toml" and remote_has_cfg:
                 continue
             local = ROOT / rel

@@ -95,6 +95,18 @@ star_user = ""
 # 可选：GitHub Token（只需 public_repo 读权限），不配则无法校验
 github_token = ""
 
+[imagegen]
+# 文生图：OpenAI 兼容的 /images/generations，和 [llm] 是两套接口，可共存
+enabled = false
+# base_url / api_key 留空则继承 [llm]，适合同一家厂商；跨厂商就分别填
+base_url = ""
+api_key = ""
+# 必填，例如 dall-e-3 / flux.1 / wanx-v1
+model = ""
+size = "1024x1024"
+# 给提示词加固定前缀，例如「动漫风格，高清」
+prefix = ""
+
 [message]
 # 官方标签，纯文本 "@全体成员" 只会显示灰字、不触发提醒
 at_all_template = "<qqbot-at-everyone />"

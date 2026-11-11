@@ -24,7 +24,7 @@ from .api import ApiError, QQOpenAPI
 from .config import Config
 from .llm import LLMClient, LLMError
 from .vision import fetch_image, image_block
-from . import imagepick
+from . import imagegen, imagepick
 from .store import Store
 
 AT_TAG = re.compile(r"<@!?[0-9A-Za-z_\-]+>")
@@ -122,6 +122,45 @@ class ChatEngine:
 
     # ---------------- 主循环 ----------------
 
+    def _generate_image(self, group: str, member: str, message_id: str, prompt: str):
+        from .imagegen import ImageGenClient, GenError
+
+        cfg = self.cfg
+        text = (cfg.imagegen_prefix + prompt).strip()
+        client = ImageGenClient(cfg.imagegen_base_url, cfg.imagegen_api_key,
+                                cfg.imagegen_model, cfg.imagegen_size)
+        try:
+            url, blob, kind = client.generate(text)
+        except GenError as exc:
+            print(f"[gen] 生成失败: {exc}", flush=True)
+            self.store.log_action("imagegen", group, member, prompt[:60], False, str(exc)[:150])
+            try:
+                self.api.send_message(group, f"画图失败：{exc.message[:60]}", msg_id=message_id)
+            except ApiError:
+                pass
+            return
+
+        try:
+            if url:
+                st, _ = self.api.send_image(group, url, msg_id=message_id)
+            else:
+                up_st, up = self.api.upload_image_bytes(group, blob or b"", "gen.png")
+                info = (up or {}).get("file_info")
+                if not info:
+                    raise ApiError(up_st, None, "上传无 file_info")
+                st, _ = self.api.request("POST", f"/v2/groups/{group}/messages", {
+                    "msg_type": 7, "media": {"file_info": info},
+                    "msg_id": message_id, "msg_seq": 1})
+        except ApiError as exc:
+            print(f"[gen] 发送失败: {exc.code} {exc.message}", flush=True)
+            self.store.log_action("imagegen", group, member, prompt[:60], False, f"send {exc.code}")
+            return
+
+        self._last_reply[group] = time.time()
+        self.store.log_action("imagegen", group, member, prompt[:60], True,
+                              f"HTTP {st} {kind} {len(blob or b'')}B")
+        print(f"[gen] 已生成并发送 群={group[:8]}… {prompt[:30]}", flush=True)
+
     def _send_found_image(self, group: str, member: str, message_id: str, query: str):
         cand = imagepick.pick(query, self.cfg.image_max_bytes)
         if not cand:
@@ -189,7 +228,14 @@ class ChatEngine:
         if now - self._last_reply.get(group, 0) < self.cfg.llm_cooldown:
             return
 
-        # 找图意图优先，直接发图，不走模型
+        # 1) 文生图：说了「画一张…」就走生成，不走对话模型
+        if self.cfg.imagegen_enabled:
+            prompt = imagegen.detect(question)
+            if prompt:
+                self._generate_image(group, member, message_id, prompt)
+                return
+
+        # 2) 找图意图，直接发图，不走模型
         if self.cfg.image_search_enabled:
             info = imagepick.classify(question, self.cfg.image_categories)
             if info and not info["allowed"]:

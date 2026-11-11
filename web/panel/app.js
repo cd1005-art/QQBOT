@@ -467,6 +467,34 @@ async function viewChat() {
       </div>
     </div>
 
+    <div class="panel" id="genCard"><div class="panel-h">文生图<span class="sp"></span>
+      <span class="hint">与对话模型是两套接口，可共存</span></div>
+      <div class="panel-b">
+        <div class="row" style="align-items:flex-end;margin-bottom:12px">
+          <label class="field grow" style="margin:0"><span>base_url（留空继承对话）</span>
+            <input id="gBase" placeholder="${esc(d.base_url || "https://api.openai.com/v1")}"></label>
+          <label class="field grow" style="margin:0"><span>api_key（留空继承对话）</span>
+            <input id="gKey" type="password" placeholder="sk-..."></label>
+          <label class="field" style="margin:0;width:190px"><span>model</span>
+            <input id="gModel" placeholder="dall-e-3 / flux.1"></label>
+        </div>
+        <div class="row" style="align-items:flex-end;margin-bottom:12px">
+          <label class="field" style="margin:0;width:150px"><span>尺寸</span>
+            <input id="gSize" value="1024x1024"></label>
+          <label class="field grow" style="margin:0"><span>提示词前缀（可空）</span>
+            <input id="gPrefix" placeholder="动漫风格，高清"></label>
+          <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-bottom:6px">
+            <input type="checkbox" id="gOn" style="width:auto"> 启用文生图</label>
+          <button class="btn pri" id="gSaveBtn" onclick="saveImagegen()">保存</button>
+        </div>
+        <div class="row">
+          <input id="gProbe" class="grow" value="一只橘猫坐在窗台上，阳光">
+          <button class="btn" onclick="testImagegen()">试画一张</button>
+        </div>
+        <div class="hint mt8" id="gOut" style="font-size:12.5px;color:var(--muted)"></div>
+      </div>
+    </div>
+
     <div class="panel"><div class="panel-h">回复行为<span class="sp"></span>
       <span class="hint">影响规则回复与模型回复</span></div><div class="panel-b">
       <div class="row" style="justify-content:space-between">
@@ -490,6 +518,52 @@ async function viewChat() {
       <span class="hint">本地留档</span></div>
       <div class="flush" id="chatBox">${skeleton(3)}</div></div>`;
   loadChats();
+  loadImagegen();
+}
+
+async function loadImagegen() {
+  const j = await api("/panel/api/imagegen");
+  if (!j.ok) return;
+  const g = j.data;
+  $("#gOn").checked = !!g.enabled;
+  $("#gBase").value = g.base_url || "";
+  $("#gKey").value = "";
+  $("#gKey").placeholder = g.api_key || "留空继承对话配置";
+  $("#gModel").value = g.model || "";
+  $("#gSize").value = g.size || "1024x1024";
+  $("#gPrefix").value = g.prefix || "";
+  $("#gOut").textContent = g.effective_base
+    ? `当前生效地址：${g.effective_base}` : "尚未配置 base_url";
+}
+
+async function saveImagegen() {
+  const btn = $("#gSaveBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "保存中…"; }
+  try {
+    const j = await api("/panel/api/imagegen", { method: "POST", body: JSON.stringify({
+      enabled: $("#gOn").checked, base_url: $("#gBase").value.trim(),
+      api_key: $("#gKey").value.trim(), model: $("#gModel").value.trim(),
+      size: $("#gSize").value.trim(), prefix: $("#gPrefix").value.trim() }) });
+    if (j.ok) { toast("文生图配置已保存", "ok"); loadImagegen(); }
+    else toast(j.error || "保存失败", "bad");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "保存"; }
+  }
+}
+
+async function testImagegen() {
+  const out = $("#gOut");
+  out.textContent = "生成中，最多等 60 秒…";
+  const j = await api("/panel/api/imagegen/test", { method: "POST",
+    body: JSON.stringify({ prompt: $("#gProbe").value }) });
+  if (j.ok) {
+    const d = j.data;
+    out.innerHTML = `<span class="badge ok">成功</span> ${esc(d.model || "")}
+      · ${d.kind === "url" ? "返回图片地址" : "返回二进制"}${d.bytes ? " " + Math.round(d.bytes/1024) + " KB" : ""}
+      ${d.url ? `<br><span class="mono" style="font-size:11.5px;word-break:break-all">${esc(d.url)}</span>` : ""}`;
+  } else {
+    out.innerHTML = `<span class="badge bad">失败</span> ${esc(j.error)}`;
+  }
 }
 
 async function saveLLM() {

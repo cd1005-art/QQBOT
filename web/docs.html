@@ -63,6 +63,7 @@ th{color:var(--muted);font-weight:500}
   <a href="#schedules">定时任务</a>
   <a href="#chat">对话（大模型）</a>
   <a href="#vision">图片识别与审核</a>
+  <a href="#imagegen">文生图</a>
   <a href="#imgsearch">网络找图</a>
   <a href="#at">回复 @ 提问者</a>
   <a href="#security">安全模型</a>
@@ -194,6 +195,17 @@ journalctl -u qqbot -f</pre>
     <tr><td><code>notice</code></td><td>违规后是否在群里补一句提示</td></tr>
   </table>
   <div class="tip">模型输出要求纯 JSON；解析失败按「不违规」处理，避免误伤。建议先用 <code>none</code> 观察几天再切到处置。</div>
+
+  <h2 id="imagegen">文生图</h2>
+  <p>与对话模型是两套接口，可共存。群里说「画一张…」时走 <code>/images/generations</code>，不经过对话模型。</p>
+  <table>
+    <tr><th>配置</th><th>说明</th></tr>
+    <tr><td><code>base_url</code> / <code>api_key</code></td><td>留空继承 <code>[llm]</code>；跨厂商时分别填</td></tr>
+    <tr><td><code>model</code></td><td>必填，如 <code>dall-e-3</code> / <code>flux.1</code> / <code>wanx-v1</code></td></tr>
+    <tr><td><code>size</code></td><td>默认 1024x1024</td></tr>
+    <tr><td><code>prefix</code></td><td>统一加在提示词前，如「动漫风格，高清」</td></tr>
+  </table>
+  <div class="warn">对话网关通常没有 images 接口，需要单独接一家生图服务。</div>
 
   <h2 id="imgsearch">网络找图</h2>
   <p>群友说「来张二次元图片」时，从 360 图片接口取图并发送到群。URL 由平台转存，失败自动退回二进制上传。</p>

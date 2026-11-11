@@ -27,6 +27,7 @@ from . import cfgedit
 from .api import CST, MAX_MUTE_MINUTES, ApiError, QQOpenAPI, rfc3339
 from .auth import AuthError, TokenManager
 from .config import Config
+from .imagegen import GenError, ImageGenClient
 from .llm import LLMClient, LLMError
 from .scheduler import CronError, next_after, parse as cron_parse
 from .store import Store
@@ -193,6 +194,52 @@ class Panel:
             {"role": "user", "content": prompt},
         ])
         return {"answer": answer, "tokens": tokens, "model": self.cfg.llm_model}
+
+    # ---------------- 文生图 ----------------
+
+    def imagegen_settings(self) -> dict:
+        c = self.cfg
+        masked = ("*" * 10 + c.imagegen_api_key[-4:]) if c.imagegen_api_key else ""
+        return {
+            "enabled": c.imagegen_enabled,
+            "base_url": c.imagegen_base_url,
+            "effective_base": c.imagegen_base_url or c.llm_base_url,
+            "api_key": masked,
+            "model": c.imagegen_model,
+            "size": c.imagegen_size,
+            "prefix": c.imagegen_prefix,
+        }
+
+    def save_imagegen(self, body: dict) -> dict:
+        c = self.cfg
+        items = {}
+        if "enabled" in body:
+            c.imagegen_enabled = bool(body["enabled"]); items["enabled"] = c.imagegen_enabled
+        for field, attr in (("base_url", "imagegen_base_url"), ("model", "imagegen_model"),
+                            ("size", "imagegen_size"), ("prefix", "imagegen_prefix")):
+            if field in body:
+                val = str(body[field]).strip()
+                setattr(c, attr, val)
+                items[field] = val
+        key = (body.get("api_key") or "").strip()
+        if key and not key.startswith("****"):
+            c.imagegen_api_key = key
+            items["api_key"] = key
+        if items:
+            cfgedit.patch_many(c.source_path, "imagegen", items)
+        self.store.log_action("imagegen-save", None, None,
+                              json.dumps({k: v for k, v in body.items() if k != "api_key"},
+                                         ensure_ascii=False), True, "saved")
+        return self.imagegen_settings()
+
+    def imagegen_test(self, prompt: str) -> dict:
+        c = self.cfg
+        client = ImageGenClient(c.imagegen_base_url or c.llm_base_url,
+                                c.imagegen_api_key or c.llm_api_key,
+                                c.imagegen_model or "", c.imagegen_size)
+        url, blob, kind = client.generate((c.imagegen_prefix + prompt).strip())
+        return {"kind": kind, "url": url, "bytes": len(blob or b""),
+                "model": c.imagegen_model}
 
     # ---------------- 图片审核 ----------------
 
@@ -673,6 +720,8 @@ class _Handler(BaseHTTPRequestHandler):
             elif path.startswith("/panel/api/groups/") and path.endswith("/stats"):
                 g = path.split("/")[4]
                 self._json({"ok": True, "data": p.group_detail(g)})
+            elif path == "/panel/api/imagegen":
+                self._json({"ok": True, "data": p.imagegen_settings()})
             elif path == "/panel/api/vision":
                 self._json({"ok": True, "data": p.vision_settings()})
             elif path == "/panel/api/vision/results":
@@ -744,6 +793,22 @@ class _Handler(BaseHTTPRequestHandler):
 
         if not self._authed():
             self._json({"ok": False, "error": "unauthorized"}, 401)
+            return
+
+        if path == "/panel/api/imagegen":
+            try:
+                self._json({"ok": True, "data": p.save_imagegen(self._body())})
+            except (ValueError, TypeError) as exc:
+                self._json({"ok": False, "error": str(exc)}, 400)
+            return
+
+        if path == "/panel/api/imagegen/test":
+            body = self._body()
+            prompt = (body.get("prompt") or "一只橘猫").strip()
+            try:
+                self._json({"ok": True, "data": p.imagegen_test(prompt)})
+            except GenError as exc:
+                self._json({"ok": False, "error": str(exc)}, 400)
             return
 
         if path == "/panel/api/vision":

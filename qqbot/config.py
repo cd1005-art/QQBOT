@@ -75,6 +75,13 @@ class Config:
     github_token: str = ""
     soft_prompt: bool = True
     soft_interval_hours: int = 24
+    # 文生图（与对话模型是两套接口，可共存）
+    imagegen_enabled: bool = False
+    imagegen_base_url: str = ""
+    imagegen_api_key: str = ""
+    imagegen_model: str = ""
+    imagegen_size: str = "1024x1024"
+    imagegen_prefix: str = ""
     # 网络找图
     image_search_enabled: bool = False
     image_max_bytes: int = 5 * 1024 * 1024
@@ -109,6 +116,7 @@ def load(path: str | Path | None = None) -> Config:
     reply = raw.get("reply", {})
     vision = raw.get("vision", {})
     image = raw.get("image", {})
+    imagegen = raw.get("imagegen", {})
     about = raw.get("about", {})
 
     app_id = os.getenv("QQBOT_APP_ID") or bot.get("app_id", "")
@@ -172,6 +180,12 @@ def load(path: str | Path | None = None) -> Config:
         github_token=str(about.get("github_token", "")).strip(),
         soft_prompt=bool(about.get("soft_prompt", True)),
         soft_interval_hours=int(about.get("soft_interval_hours", 24)),
+        imagegen_enabled=bool(imagegen.get("enabled", False)),
+        imagegen_base_url=str(imagegen.get("base_url", "")),
+        imagegen_api_key=str(imagegen.get("api_key", "")),
+        imagegen_model=str(imagegen.get("model", "")),
+        imagegen_size=str(imagegen.get("size", "1024x1024")),
+        imagegen_prefix=str(imagegen.get("prefix", "")),
         image_search_enabled=bool(image.get("search_enabled", False)),
         image_max_bytes=int(image.get("max_bytes", 5 * 1024 * 1024)),
         image_categories=[str(x) for x in image.get("categories", ['二次元', '动漫', '漫画', '插画', '壁纸', '搞笑', '风景', '宠物', '游戏', '表情包'])],

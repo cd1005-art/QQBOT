@@ -659,7 +659,13 @@ async function viewSettings() {
 
     <div class="panel"><div class="panel-h">开源项目</div><div class="panel-b">
       <div class="row" style="justify-content:space-between;align-items:center">
-        <b style="font-size:13px">${esc(d.repo || "-")}</b>
+        <div>
+          <b style="font-size:13px">${esc(d.repo || "-")}</b>
+          <div class="hint" style="color:var(--muted);font-size:12px">
+            ${d.starred === true
+              ? "弹窗提示：关闭 · 感谢您的支持"
+              : `弹窗提示：${d.soft_prompt ? "开启" : "关闭"} · 间隔：${d.soft_interval_hours ? d.soft_interval_hours + " 小时" : "仅一次"}`}</div>
+        </div>
         <a class="btn" style="text-decoration:none" target="_blank" rel="noopener"
            href="https://github.com/${esc(d.repo || "cd1005-art/QQBOT")}">打开仓库</a>
       </div>

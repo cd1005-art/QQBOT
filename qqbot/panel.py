@@ -410,14 +410,25 @@ class Panel:
                 return False, None
         return False, "Star 数超过 1000，未在前 10 页找到该用户"
 
+    def star_checked(self):
+        """仅用于界面展示：True=已点星，False=未点，None=未配置或无法校验。"""
+        c = self.cfg
+        if not c.star_user or not c.github_token:
+            return None
+        cache = getattr(self, "_star_cache", None)
+        if cache:
+            return bool(cache["data"].get("starred"))
+        starred, _ = self._check_star(c.repo, c.star_user, c.github_token)
+        return bool(starred) if starred is not None else None
+
     def star_prompt(self) -> dict:
         """软提示：与硬门槛互斥——require_star 开着时不再弹。"""
         c = self.cfg
         last = int(self.store.get_kv("star_prompt_at", "0") or 0)
         interval = max(0, c.soft_interval_hours) * 3600
         now = int(time.time())
-        if not c.soft_prompt or c.require_star:
-            show = False
+        if not c.soft_prompt or c.require_star or self.star_checked() is True:
+            show = False   # 已点星就不再打扰
         elif last == 0:
             show = True
         elif interval == 0:
@@ -441,6 +452,7 @@ class Panel:
             "star_user": self.cfg.star_user,
             "soft_prompt": self.cfg.soft_prompt,
             "soft_interval_hours": self.cfg.soft_interval_hours,
+            "starred": self.star_checked(),
             "listen": f"{self.cfg.listen_host}:{self.cfg.listen_port}{self.cfg.webhook_path}",
             "panel": f"{self.cfg.panel_host}:{self.cfg.panel_port}",
             "db": str(self.cfg.db_path),

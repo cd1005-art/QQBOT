@@ -319,6 +319,22 @@ tools/deploy.py 一键部署（可选，含 SSH 上传）
 PLAN.md         版本路线（P0 / P1 / P2）
 ```
 
+## Star 门槛（可选，默认关闭）
+
+```toml
+[about]
+repo = "cd1005-art/QQBOT"
+require_star = false      # 开启后未点 Star 无法进入面板
+star_user = ""            # 要校验的 GitHub 用户名
+github_token = ""         # 必填，否则无法校验
+```
+
+**注意三点：**
+
+1. GitHub 的 `/stargazers` 接口现在**要求鉴权**，不配 `github_token` 会返回 401，程序会 fail-open（放行）。
+2. 自托管项目里这层门槛只能算仪式感——fork 后删掉即可绕过，离线部署也连不上 GitHub。
+3. 你不能给自己仓库点 Star，所以 `star_user` 填自己的话会把自己锁在外面；改 `config.toml` 把 `require_star` 置 false 即可恢复。
+
 ## 许可
 
 MIT

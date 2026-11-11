@@ -1059,6 +1059,37 @@ async function doLogin() {
   else { $("#loginHint").textContent = j.error || "登录失败"; }
 }
 
+async function starGate() {
+  const j = await api("/panel/api/star").catch(() => ({ ok: false }));
+  if (!j.ok || !j.data || !j.data.required) return true;
+  const d = j.data;
+  if (d.starred) return true;
+
+  const box = $("#stargate");
+  box.classList.remove("hide");
+  $("#login").classList.add("hide");
+  $("#app").classList.add("hide");
+  const repo = d.repo || "cd1005-art/QQBOT";
+  $("#starRepo").textContent = `本项目完全免费，使用前请为 ${repo} 点一个 Star`;
+  $("#starLink").href = `https://github.com/${repo}`;
+  $("#starMsg").textContent = d.user
+    ? `正在校验 GitHub 用户：${d.user}${d.error ? " · " + d.error : ""}`
+    : (d.error || "未配置 GitHub 用户名");
+  return false;
+}
+
+async function recheckStar() {
+  $("#starMsg").textContent = "检测中…";
+  const j = await api("/panel/api/star/check", { method: "POST" });
+  if (j.ok && j.data && j.data.starred) {
+    $("#stargate").classList.add("hide");
+    toast("验证通过，感谢支持", "ok");
+    boot();
+  } else {
+    $("#starMsg").textContent = (j.ok && j.data && j.data.error) || "还没检测到 Star，点完稍等几秒再试";
+  }
+}
+
 async function boot() {
   const me = await api("/panel/api/me").catch(() => ({ ok: false }));
   if (!me.ok) return showLogin();
@@ -1079,6 +1110,7 @@ async function boot() {
 
 window.addEventListener("hashchange", () => { if (!$("#app").classList.contains("hide")) route(); });
 window.addEventListener("DOMContentLoaded", async () => {
+  if (!(await starGate())) return;
   const me = await api("/panel/api/me").catch(() => ({ ok: false }));
   if (me.ok) boot(); else showLogin();
 });

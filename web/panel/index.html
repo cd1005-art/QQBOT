@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0e1116">
 <title>QQBOT 控制台</title>
-<link rel="stylesheet" href="app.css?v=20261111i">
+<link rel="stylesheet" href="app.css?v=20261111j">
 </head>
 <body>
 
@@ -30,9 +30,19 @@
   <main class="main" id="main"></main>
 </div>
 
+<div id="stargate" class="hide" style="position:fixed;inset:0;z-index:210;background:rgba(10,13,18,.96);display:flex;align-items:center;justify-content:center;padding:20px">
+  <div class="login-box">
+    <h2>先给项目点个 Star</h2>
+    <p class="sub" id="starRepo">本项目完全免费，使用前请为仓库点一个 Star</p>
+    <a class="btn pri" id="starLink" style="display:block;text-align:center;text-decoration:none" target="_blank" rel="noopener">去 GitHub 点 Star</a>
+    <button class="btn mt12" style="width:100%" onclick="recheckStar()">我已 Star，重新检测</button>
+    <div class="sub mt12" id="starMsg" style="color:var(--muted);font-size:12px;margin:10px 0 0"></div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
-<script src="app.js?v=20261111i"></script>
+<script src="app.js?v=20261111j"></script>
 <script>
 /* 未完成初始化：直接进引导页 */
 (async function () {

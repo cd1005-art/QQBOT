@@ -350,6 +350,66 @@ class Panel:
         self.store.log_action("schedule-add", None, str(sid), json.dumps(body, ensure_ascii=False), True, "created")
         return {"id": sid, "next_run": nxt}
 
+    # ---------------- Star 门槛 ----------------
+
+    def star_status(self, force: bool = False) -> dict:
+        """检查配置的 GitHub 用户是否给仓库点过 Star。
+
+        - 未开启：直接放行
+        - 网络/接口异常：放行（fail-open），避免离线部署被卡死
+        - 结果缓存 12 小时，避免刷接口触发限流
+        """
+        c = self.cfg
+        out = {"required": c.require_star, "repo": c.repo, "user": c.star_user,
+               "starred": True, "error": None, "checked_at": 0}
+        if not c.require_star:
+            return out
+        if not c.star_user:
+            out.update(starred=False, error="未配置 GitHub 用户名（[about] star_user）")
+            return out
+
+        now = time.time()
+        cache = getattr(self, "_star_cache", None)
+        if cache and not force and now - cache["at"] < 12 * 3600:
+            return cache["data"]
+
+        starred, error = self._check_star(c.repo, c.star_user, c.github_token)
+        out.update(starred=bool(starred), error=error, checked_at=int(now))
+        self._star_cache = {"at": now, "data": out}
+        return out
+
+    @staticmethod
+    def _check_star(repo: str, user: str, token: str = "") -> tuple[bool, str | None]:
+        import urllib.error
+        import urllib.request
+        target = user.lower()
+        for page in range(1, 11):  # 最多翻 1000 个 star
+            url = (f"https://api.github.com/repos/{repo}/stargazers"
+                   f"?per_page=100&page={page}")
+            headers = {"Accept": "application/vnd.github+json",
+                       "User-Agent": "qqbot-star-check"}
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+            req = urllib.request.Request(url, headers=headers)
+            try:
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    data = json.loads(resp.read().decode("utf-8", "replace"))
+            except urllib.error.HTTPError as exc:
+                if exc.code == 404:
+                    return False, f"仓库不存在或不可访问: {repo}"
+                if exc.code in (401, 403):
+                    return True, "GitHub 需要鉴权（配 [about] github_token 才可校验），本次放行"
+                return True, f"GitHub 返回 {exc.code}，本次放行"
+            except Exception as exc:
+                return True, f"无法访问 GitHub（{type(exc).__name__}），本次放行"
+            if not data:
+                return False, None
+            if any((u.get("login") or "").lower() == target for u in data):
+                return True, None
+            if len(data) < 100:
+                return False, None
+        return False, "Star 数超过 1000，未在前 10 页找到该用户"
+
     def settings(self) -> dict:
         return {
             "app_id": self.cfg.app_id,
@@ -359,6 +419,9 @@ class Panel:
             "allowed_groups": self.cfg.allowed_groups,
             "at_all_template": self.cfg.at_all_template,
             "reply_at_user": self.cfg.reply_at_user,
+            "repo": self.cfg.repo,
+            "require_star": self.cfg.require_star,
+            "star_user": self.cfg.star_user,
             "listen": f"{self.cfg.listen_host}:{self.cfg.listen_port}{self.cfg.webhook_path}",
             "panel": f"{self.cfg.panel_host}:{self.cfg.panel_port}",
             "db": str(self.cfg.db_path),
@@ -532,6 +595,9 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/panel/api/health":
             self._json({"ok": True, "panel": True})
             return
+        if path == "/panel/api/star":
+            self._json({"ok": True, "data": self.panel.star_status()})
+            return
         if path == "/panel/api/setup/status":
             self._json({"ok": True, "data": self.panel.setup_status()})
             return
@@ -604,6 +670,10 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
         p = self.panel
+
+        if path == "/panel/api/star/check":
+            self._json({"ok": True, "data": p.star_status(force=True)})
+            return
 
         if path == "/panel/api/setup":
             try:

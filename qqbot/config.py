@@ -68,6 +68,11 @@ class Config:
     vision_notice: str = ""
     vision_max_bytes: int = 8 * 1024 * 1024
     vision_max_tokens: int = 800
+    # 开源项目信息 / Star 门槛
+    repo: str = "cd1005-art/QQBOT"
+    require_star: bool = False
+    star_user: str = ""
+    github_token: str = ""
     # 网络找图
     image_search_enabled: bool = False
     image_max_bytes: int = 5 * 1024 * 1024
@@ -102,6 +107,7 @@ def load(path: str | Path | None = None) -> Config:
     reply = raw.get("reply", {})
     vision = raw.get("vision", {})
     image = raw.get("image", {})
+    about = raw.get("about", {})
 
     app_id = os.getenv("QQBOT_APP_ID") or bot.get("app_id", "")
     app_secret = os.getenv("QQBOT_APP_SECRET") or bot.get("app_secret", "")
@@ -158,6 +164,10 @@ def load(path: str | Path | None = None) -> Config:
         vision_notice=str(vision.get("notice", "")),
         vision_max_bytes=int(vision.get("max_bytes", 8 * 1024 * 1024)),
         vision_max_tokens=int(vision.get("max_tokens", 800)),
+        repo=str(about.get("repo", "cd1005-art/QQBOT")),
+        require_star=bool(about.get("require_star", False)),
+        star_user=str(about.get("star_user", "")).strip(),
+        github_token=str(about.get("github_token", "")).strip(),
         image_search_enabled=bool(image.get("search_enabled", False)),
         image_max_bytes=int(image.get("max_bytes", 5 * 1024 * 1024)),
         image_categories=[str(x) for x in image.get("categories", ['二次元', '动漫', '漫画', '插画', '壁纸', '搞笑', '风景', '宠物', '游戏', '表情包'])],

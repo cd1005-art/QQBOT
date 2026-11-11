@@ -479,7 +479,7 @@ async function viewChat() {
             <input id="gModel" placeholder="dall-e-3 / flux.1"></label>
         </div>
         <div class="row" style="align-items:flex-end;margin-bottom:12px">
-          <label class="field" style="margin:0;width:150px"><span>尺寸</span>
+          <label class="field" style="margin:0;width:150px"><span>默认尺寸</span>
             <input id="gSize" value="1024x1024"></label>
           <label class="field grow" style="margin:0"><span>提示词前缀（可空）</span>
             <input id="gPrefix" placeholder="动漫风格，高清"></label>
@@ -491,6 +491,8 @@ async function viewChat() {
           <input id="gProbe" class="grow" value="一只橘猫坐在窗台上，阳光">
           <button class="btn" onclick="testImagegen()">试画一张</button>
         </div>
+        <div class="hint mt8" style="font-size:12px;color:var(--muted)">
+          群友说「竖版」「横图」「768x1344」时会临时覆盖默认尺寸；没提就按上面这个值。</div>
         <div class="hint mt8" id="gOut" style="font-size:12.5px;color:var(--muted)"></div>
       </div>
     </div>
@@ -555,7 +557,7 @@ async function testImagegen() {
   const out = $("#gOut");
   out.textContent = "生成中，最多等 60 秒…";
   const j = await api("/panel/api/imagegen/test", { method: "POST",
-    body: JSON.stringify({ prompt: $("#gProbe").value }) });
+    body: JSON.stringify({ prompt: $("#gProbe").value, size: $("#gSize").value.trim() }) });
   if (j.ok) {
     const d = j.data;
     out.innerHTML = `<span class="badge ok">成功</span> ${esc(d.model || "")}

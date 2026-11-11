@@ -92,6 +92,33 @@ VERB_RE = re.compile(r"(生成|绘制|作图|画|做|出)(一|个|张|幅|只|�
 LEAD_JUNK = ("机器人", "@", "帮我", "帮忙", "请", "麻烦", "给我", "能不能", "可以", "能否")
 
 
+# 常见说法 → 尺寸。只做保守映射，避免猜错模型不支持的规格。
+SIZE_HINTS = [
+    (("竖版", "竖图", "纵向", "手机壁纸", "竖屏"), "1024x1536"),
+    (("横版", "横图", "横向", "电脑壁纸", "横屏", "壁纸尺寸"), "1536x1024"),
+    (("方图", "方形", "正方形", "头像"), "1024x1024"),
+]
+SIZE_RE = re.compile(r"(\d{3,4})\s*[x×*]\s*(\d{3,4})")
+
+
+def parse_size(text: str, default: str = "1024x1024") -> str:
+    """从用户话里取尺寸：先认显式 WxH，再认竖/横/方这类说法，都没有就用默认。
+
+    显式尺寸限制在 256~2048，超出范围视为无效，回落到默认。
+    """
+    t = text or ""
+    m = SIZE_RE.search(t)
+    if m:
+        w, h = int(m.group(1)), int(m.group(2))
+        if 256 <= w <= 2048 and 256 <= h <= 2048:
+            return f"{w}x{h}"
+        return default
+    for words, size in SIZE_HINTS:
+        if any(w in t for w in words):
+            return size
+    return default
+
+
 def detect(text: str) -> str | None:
     """识别「画/做/生成 一张图…」这类指令，返回提示词。
 

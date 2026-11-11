@@ -249,6 +249,16 @@ def check_image_block():
     return "图片识别：多模态块构造 / 纯图触发 / 开关生效 通过"
 
 
+def check_gen_size():
+    assert imagegen.parse_size("画一张橘猫", "1024x1024") == "1024x1024"
+    assert imagegen.parse_size("画一张竖版的橘猫", "1024x1024") == "1024x1536"
+    assert imagegen.parse_size("画一张横图", "1024x1024") == "1536x1024"
+    assert imagegen.parse_size("画一张方图", "1536x1024") == "1024x1024"
+    assert imagegen.parse_size("画一张 768x1344 的图", "1024x1024") == "768x1344"
+    assert imagegen.parse_size("画一张 9999x9999", "1024x1024") == "1024x1024"  # 超范围回落
+    return "生图尺寸解析通过"
+
+
 def check_image_intent():
     assert imagepick.detect("来张二次元图片") == "二次元 动漫 壁纸"
     assert imagepick.detect("找张搞笑图") == "搞笑 表情包"
@@ -340,6 +350,7 @@ def main() -> int:
     print(check_image_block())
     print(check_image_intent())
     print(check_imagegen_intent())
+    print(check_gen_size())
     print("smoke ok")
     return 0
 

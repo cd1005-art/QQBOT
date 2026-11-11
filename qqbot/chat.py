@@ -123,13 +123,14 @@ class ChatEngine:
     # ---------------- 主循环 ----------------
 
     def _generate_image(self, group: str, member: str, message_id: str, prompt: str,
-                        question_for_log: str = ""):
+                        question_for_log: str = "", size: str = ""):
         from .imagegen import ImageGenClient, GenError
 
         cfg = self.cfg
         text = (cfg.imagegen_prefix + prompt).strip()
+        use_size = size or cfg.imagegen_size
         client = ImageGenClient(cfg.imagegen_base_url, cfg.imagegen_api_key,
-                                cfg.imagegen_model, cfg.imagegen_size)
+                                cfg.imagegen_model, use_size)
         try:
             url, blob, kind = client.generate(text)
         except GenError as exc:
@@ -163,7 +164,7 @@ class ChatEngine:
         self.store.add_chat(group, member, "assistant",
                             f"[图片] {prompt}", model, "imagegen")
         self.store.log_action("imagegen", group, member, prompt[:60], True,
-                              f"HTTP {st} {kind} {len(blob or b'')}B")
+                              f"HTTP {st} {kind} {use_size} {len(blob or b'')}B")
         print(f"[gen] 已生成并发送 群={group[:8]}… {prompt[:30]}", flush=True)
 
     def _send_found_image(self, group: str, member: str, message_id: str, query: str,
@@ -250,7 +251,8 @@ class ChatEngine:
         if self.cfg.imagegen_enabled:
             prompt = imagegen.detect(question)
             if prompt:
-                self._generate_image(group, member, message_id, prompt, question)
+                self._generate_image(group, member, message_id, prompt, question,
+                                     imagegen.parse_size(question, cfg.imagegen_size))
                 return
 
         # 2) 找图意图，直接发图，不走模型

@@ -232,11 +232,11 @@ class Panel:
                                          ensure_ascii=False), True, "saved")
         return self.imagegen_settings()
 
-    def imagegen_test(self, prompt: str) -> dict:
+    def imagegen_test(self, prompt: str, size: str = "") -> dict:
         c = self.cfg
         client = ImageGenClient(c.imagegen_base_url or c.llm_base_url,
                                 c.imagegen_api_key or c.llm_api_key,
-                                c.imagegen_model or "", c.imagegen_size)
+                                c.imagegen_model or "", size or c.imagegen_size)
         url, blob, kind = client.generate((c.imagegen_prefix + prompt).strip())
         return {"kind": kind, "url": url, "bytes": len(blob or b""),
                 "model": c.imagegen_model}
@@ -806,7 +806,7 @@ class _Handler(BaseHTTPRequestHandler):
             body = self._body()
             prompt = (body.get("prompt") or "一只橘猫").strip()
             try:
-                self._json({"ok": True, "data": p.imagegen_test(prompt)})
+                self._json({"ok": True, "data": p.imagegen_test(prompt, body.get("size") or "")})
             except GenError as exc:
                 self._json({"ok": False, "error": str(exc)}, 400)
             return

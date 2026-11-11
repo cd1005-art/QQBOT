@@ -915,11 +915,11 @@ async function viewRules() {
     </div>
     <div class="panel hide" id="ruleForm"><div class="panel-h" id="ruleFormTitle">新建规则</div><div class="panel-b">
       <div class="row" style="align-items:flex-end">
-        <label class="field grow" style="margin:0"><span>名称</span><input id="rName" placeholder="例如：广告词拦截"></label>
+        <label class="field" style="margin:0;width:220px"><span>名称</span><input id="rName" placeholder="例如：广告词拦截"></label>
         <label class="field" style="margin:0;width:130px"><span>匹配方式</span>
           <select id="rType"><option value="contains">包含</option><option value="regex">正则</option></select></label>
         <label class="field grow" style="margin:0"><span>匹配内容</span><input id="rPattern" placeholder="广告 / 加群 / https?://"></label>
-        <label class="field" style="margin:0;width:170px"><span>动作</span>
+        <label class="field" style="margin:0;width:150px"><span>动作</span>
           <select id="rAction" onchange="syncMinutes()">
             <option value="recall">撤回</option>
             <option value="mute">禁言</option>
@@ -1088,21 +1088,24 @@ async function loadRules() {
   const j = await api("/panel/api/rules");
   const rows = j.ok ? j.data : [];
   if (!rows.length) { $("#ruleBox").innerHTML = empty("还没有规则", "点右上角「新建规则」开始"); return; }
-  $("#ruleBox").innerHTML = `<table><thead><tr><th>名称</th><th style="width:80px">方式</th>
-    <th>匹配</th><th style="width:100px">动作</th><th style="width:110px">作用群</th>
-    <th style="width:64px">命中</th><th style="width:90px">最近</th><th style="width:130px">操作</th></tr></thead><tbody>
+  $("#ruleBox").innerHTML = `<table style="display:inline-table;width:auto"><thead><tr>
+    <th style="width:1%;white-space:nowrap">名称</th><th style="width:1%;white-space:nowrap">方式</th>
+    <th style="width:1%;white-space:nowrap">匹配</th><th style="width:1%;white-space:nowrap">动作</th>
+    <th style="width:1%;white-space:nowrap">作用群</th><th style="width:1%;white-space:nowrap">命中</th>
+    <th style="width:1%;white-space:nowrap">最近</th>
+    <th style="width:1%;white-space:nowrap">操作</th></tr></thead><tbody>
     ${rows.map(r => {
       const groups = safeJson(r.groups, []);
       const params = safeJson(r.params, {});
       return `<tr>
-        <td>${esc(r.name)}</td>
-        <td>${r.match_type === "regex" ? "正则" : "包含"}</td>
-        <td class="mono">${esc(r.pattern)}</td>
-        <td>${ACTION_TEXT[r.action] || esc(r.action)}${["mute", "recall_mute"].includes(r.action) ? `<span class="muted" style="font-size:11px"> ${params.minutes || 10}m</span>` : ""}${["reply", "recall_reply"].includes(r.action) ? `<div class="muted" style="font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">“${esc(params.reply || "")}”</div>` : ""}</td>
-        <td style="color:var(--muted);font-size:12px">${groups.length ? groups.length + " 个群" : "全部"}</td>
-        <td class="num">${r.hits}</td>
-        <td style="color:var(--muted)">${r.last_hit_at ? ago(r.last_hit_at) : "-"}</td>
-        <td><button class="btn sm" onclick="editRule(${r.id})">编辑</button>
+        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.name)}">${esc(r.name)}</td>
+        <td style="white-space:nowrap">${r.match_type === "regex" ? "正则" : "包含"}</td>
+        <td class="mono" style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.pattern)}">${esc(r.pattern)}</td>
+        <td style="white-space:nowrap">${ACTION_TEXT[r.action] || esc(r.action)}${["mute", "recall_mute"].includes(r.action) ? `<span class="muted" style="font-size:11px"> ${params.minutes || 10}m</span>` : ""}${["reply", "recall_reply"].includes(r.action) ? `<div class="muted" style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">“${esc(params.reply || "")}”</div>` : ""}</td>
+        <td style="color:var(--muted);font-size:12px;white-space:nowrap">${groups.length ? groups.length + " 个群" : "全部"}</td>
+        <td class="num" style="white-space:nowrap">${r.hits}</td>
+        <td style="color:var(--muted);white-space:nowrap">${r.last_hit_at ? ago(r.last_hit_at) : "-"}</td>
+        <td style="white-space:nowrap"><button class="btn sm" onclick="editRule(${r.id})">编辑</button>
             <button class="btn sm" onclick="toggleRule(${r.id},${r.enabled ? 0 : 1})">${r.enabled ? "停用" : "启用"}</button>
             <button class="btn sm bad" onclick="delRule(${r.id},'${esc(r.name)}')">删除</button></td>
       </tr>`;
@@ -1173,7 +1176,7 @@ async function loadSchedules() {
         <td>${esc(r.name)}</td>
         <td><code class="mono">${esc(r.cron)}</code></td>
         <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.text)}</td>
-        <td style="color:var(--muted);font-size:12px">${groups.length ? groups.length + " 个群" : "全部"}</td>
+        <td style="color:var(--muted);font-size:12px;white-space:nowrap">${groups.length ? groups.length + " 个群" : "全部"}</td>
         <td style="color:var(--muted)">${r.enabled ? (r.next_run ? ts(r.next_run) : "待排程") : '<span class="badge">已停用</span>'}</td>
         <td style="color:var(--muted);font-size:12px">${esc(r.last_result || "-")}</td>
         <td><button class="btn sm" onclick="toggleSched(${r.id},${r.enabled ? 0 : 1})">${r.enabled ? "停用" : "启用"}</button>

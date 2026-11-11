@@ -380,6 +380,43 @@ class Panel:
         self.store.log_action("rule-add", None, str(rid), json.dumps(body, ensure_ascii=False), True, "created")
         return {"id": rid}
 
+    def update_rule(self, body: dict) -> dict:
+        rid = int(body.get("id") or 0)
+        if not rid:
+            raise ValueError("缺少规则 id")
+        name = (body.get("name") or "").strip()
+        match_type = body.get("match_type") or "contains"
+        pattern = (body.get("pattern") or "").strip()
+        action = body.get("action") or "recall"
+        minutes = int(body.get("minutes") or 10)
+        reply = (body.get("reply") or "").strip()
+        groups = [g for g in (body.get("groups") or []) if g]
+        if not name or not pattern:
+            raise ValueError("名称与匹配内容必填")
+        if match_type not in ("contains", "regex"):
+            raise ValueError("match_type 只能是 contains 或 regex")
+        if action not in ("recall", "mute", "recall_mute", "reply", "recall_reply"):
+            raise ValueError("动作不合法")
+        if action in ("reply", "recall_reply") and not reply:
+            raise ValueError("回复类规则必须填写回复内容")
+        if len(reply) > 400:
+            raise ValueError("回复内容不超过 400 字")
+        if match_type == "regex":
+            import re as _re
+            try:
+                _re.compile(pattern)
+            except _re.error as exc:
+                raise ValueError(f"正则有误: {exc}")
+        if action in ("mute", "recall_mute") and not 1 <= minutes <= 43200:
+            raise ValueError("禁言时长 1~43200 分钟")
+
+        self.store.update_rule(rid, name, match_type, pattern, action,
+                               json.dumps({"minutes": minutes, "reply": reply}, ensure_ascii=False),
+                               json.dumps(groups, ensure_ascii=False))
+        self.store.log_action("rule-update", None, str(rid),
+                              json.dumps(body, ensure_ascii=False), True, "updated")
+        return {"id": rid}
+
     def create_schedule(self, body: dict) -> dict:
         name = (body.get("name") or "").strip()
         cron = (body.get("cron") or "").strip()
@@ -840,6 +877,13 @@ class _Handler(BaseHTTPRequestHandler):
             try:
                 self._json({"ok": True, "data": p.create_rule(self._body())})
             except ValueError as exc:
+                self._json({"ok": False, "error": str(exc)}, 400)
+            return
+
+        if path == "/panel/api/rules/update":
+            try:
+                self._json({"ok": True, "data": p.update_rule(self._body())})
+            except (ValueError, TypeError) as exc:
                 self._json({"ok": False, "error": str(exc)}, 400)
             return
 

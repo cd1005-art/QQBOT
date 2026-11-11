@@ -2,7 +2,7 @@
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const state = { me: null, overview: null, groups: [], group: null, gtab: "overview", timer: null };
+const state = { editingRule: null, me: null, overview: null, groups: [], group: null, gtab: "overview", timer: null };
 
 /* ---------------- 基础工具 ---------------- */
 
@@ -343,12 +343,15 @@ async function groupMembers(g) {
 }
 function membersTable(rows) {
   if (!rows.length) return empty("暂无成员记录", "等群成员发一条消息");
-  return `<table><thead><tr><th style="width:220px">成员</th><th>member_openid</th><th style="width:60px">发言</th>
+  return `<table><thead><tr><th style="width:200px">成员</th><th>member_openid</th>
+    <th style="width:64px">发言</th><th style="width:110px">首次出现</th>
     <th style="width:90px">最近</th><th style="width:150px">操作</th></tr></thead><tbody>
     ${rows.map(m => `<tr data-k="${esc((m.member_openid + " " + (m.nickname || "")).toLowerCase())}">
       <td>${who(m.nickname, m.member_openid)}</td>
       <td class="mono" style="font-size:11.5px;color:var(--muted)">${esc(m.member_openid)}</td>
-      <td class="num">${m.msg_count}</td><td style="color:var(--muted)">${ago(m.last_seen)}</td>
+      <td class="num">${m.msg_count}</td>
+      <td style="color:var(--muted);font-size:12px">${m.first_seen ? ts(m.first_seen, false) : "-"}</td>
+      <td style="color:var(--muted)">${ago(m.last_seen)}</td>
       <td><button class="btn sm" onclick="askMute('${esc(m.member_openid)}')">禁言</button>
           <button class="btn sm" onclick="act('unmute',{member:'${esc(m.member_openid)}'})">解禁</button></td></tr>`).join("")}
   </tbody></table>`;
@@ -909,7 +912,7 @@ async function viewRules() {
       </div>
       <div class="flush" id="vResults"></div>
     </div>
-    <div class="panel hide" id="ruleForm"><div class="panel-h">新建规则</div><div class="panel-b">
+    <div class="panel hide" id="ruleForm"><div class="panel-h" id="ruleFormTitle">新建规则</div><div class="panel-b">
       <div class="row" style="align-items:flex-end">
         <label class="field grow" style="margin:0"><span>名称</span><input id="rName" placeholder="例如：广告词拦截"></label>
         <label class="field" style="margin:0;width:130px"><span>匹配方式</span>
@@ -932,7 +935,8 @@ async function viewRules() {
       <div class="row mt12">
         <input id="rTestText" class="grow" placeholder="测试文本：粘贴一段话验证是否命中">
         <button class="btn" onclick="testRule()">测试命中</button>
-        <button class="btn pri" onclick="createRule()">保存规则</button>
+        <button class="btn pri" id="ruleSaveBtn" onclick="saveRule()">保存规则</button>
+        <button class="btn hide" id="ruleCancelBtn" onclick="cancelRuleEdit()">取消编辑</button>
       </div>
       <div class="hint mt8" id="rTestOut" style="font-size:12px;color:var(--muted)"></div>
     </div></div>
@@ -1027,14 +1031,53 @@ async function testRule() {
     : `<span class="badge bad">${esc(j.error)}</span>`;
 }
 
-async function createRule() {
+function cancelRuleEdit() {
+  state.editingRule = null;
+  $("#ruleFormTitle").textContent = "新建规则";
+  $("#ruleSaveBtn").textContent = "保存规则";
+  $("#ruleCancelBtn").classList.add("hide");
+  $("#ruleForm").classList.add("hide");
+  ["rName", "rPattern", "rReply", "rTestText"].forEach(id => { const el = $("#" + id); if (el) el.value = ""; });
+}
+
+async function editRule(id) {
+  const j = await api("/panel/api/rules");
+  const rule = (j.ok ? j.data : []).find(r => r.id === id);
+  if (!rule) { toast("规则不存在，刷新试试", "bad"); return; }
+  const params = safeJson(rule.params, {});
+  const groups = safeJson(rule.groups, []);
+
+  state.editingRule = id;
+  $("#ruleForm").classList.remove("hide");
+  $("#ruleFormTitle").textContent = `编辑规则 #${id}`;
+  $("#ruleSaveBtn").textContent = "保存修改";
+  $("#ruleCancelBtn").classList.remove("hide");
+
+  $("#rName").value = rule.name || "";
+  $("#rType").value = rule.match_type || "contains";
+  $("#rPattern").value = rule.pattern || "";
+  $("#rAction").value = rule.action || "recall";
+  $("#rMinutes").value = params.minutes || 10;
+  $("#rReply").value = params.reply || "";
+  syncMinutes();
+  $$(".rg").forEach(box => { box.checked = groups.includes(box.value); });
+  $("#ruleForm").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+async function saveRule() {
   const body = { name: $("#rName").value.trim(), match_type: $("#rType").value,
     pattern: $("#rPattern").value.trim(), action: $("#rAction").value,
     minutes: parseInt($("#rMinutes").value || "10", 10),
     reply: $("#rReply").value.trim(), groups: ruleGroups() };
-  const j = await api("/panel/api/rules", { method: "POST", body: JSON.stringify(body) });
-  if (j.ok) { toast("规则已创建", "ok"); $("#ruleForm").classList.add("hide"); loadRules(); }
-  else toast(j.error || "创建失败", "bad");
+  const editing = state.editingRule;
+  if (editing) body.id = editing;
+  const j = await api(editing ? "/panel/api/rules/update" : "/panel/api/rules",
+    { method: "POST", body: JSON.stringify(body) });
+  if (j.ok) {
+    toast(editing ? "规则已更新" : "规则已创建", "ok");
+    cancelRuleEdit();
+    loadRules();
+  } else toast(j.error || "保存失败", "bad");
 }
 
 const ACTION_TEXT = { recall: "撤回", mute: "禁言", recall_mute: "撤回+禁言",
@@ -1058,7 +1101,8 @@ async function loadRules() {
         <td style="color:var(--muted);font-size:12px">${groups.length ? groups.length + " 个群" : "全部"}</td>
         <td class="num">${r.hits}</td>
         <td style="color:var(--muted)">${r.last_hit_at ? ago(r.last_hit_at) : "-"}</td>
-        <td><button class="btn sm" onclick="toggleRule(${r.id},${r.enabled ? 0 : 1})">${r.enabled ? "停用" : "启用"}</button>
+        <td><button class="btn sm" onclick="editRule(${r.id})">编辑</button>
+            <button class="btn sm" onclick="toggleRule(${r.id},${r.enabled ? 0 : 1})">${r.enabled ? "停用" : "启用"}</button>
             <button class="btn sm bad" onclick="delRule(${r.id},'${esc(r.name)}')">删除</button></td>
       </tr>`;
     }).join("")}

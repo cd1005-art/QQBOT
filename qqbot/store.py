@@ -238,7 +238,7 @@ class Store:
     def list_members(self, group_openid: str, limit: int = 50) -> list[sqlite3.Row]:
         with self._conn() as conn:
             return conn.execute(
-                "SELECT member_openid, nickname, union_openid, last_seen, msg_count "
+                "SELECT member_openid, nickname, union_openid, first_seen, last_seen, msg_count "
                 "FROM members WHERE group_openid=? ORDER BY last_seen DESC LIMIT ?",
                 (group_openid, limit)).fetchall()
 
@@ -295,6 +295,14 @@ class Store:
                 "VALUES(?,?,?,?,?,?,?,?)",
                 (name, match_type, pattern, action, params, groups, int(enabled), int(time.time())))
             return int(cur.lastrowid)
+
+    def update_rule(self, rule_id: int, name: str, match_type: str, pattern: str,
+                    action: str, params: str, groups: str):
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE rules SET name=?, match_type=?, pattern=?, action=?, params=?, groups=? "
+                "WHERE id=?",
+                (name, match_type, pattern, action, params, groups, rule_id))
 
     def set_rule_enabled(self, rule_id: int, enabled: bool):
         with self._conn() as conn:

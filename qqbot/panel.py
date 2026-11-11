@@ -199,6 +199,7 @@ class Panel:
         c = self.cfg
         return {
             "enabled": c.vision_enabled,
+            "chat_enabled": c.vision_chat_enabled,
             "model": c.vision_model or c.llm_model,
             "model_custom": bool(c.vision_model),
             "base_url": c.vision_base_url or c.llm_base_url,
@@ -219,6 +220,9 @@ class Panel:
         items = {}
         if "enabled" in body:
             c.vision_enabled = bool(body["enabled"]); items["enabled"] = c.vision_enabled
+        if "chat_enabled" in body:
+            c.vision_chat_enabled = bool(body["chat_enabled"])
+            items["chat_enabled"] = c.vision_chat_enabled
         if "model" in body:
             c.vision_model = str(body["model"]).strip(); items["model"] = c.vision_model
         if "base_url" in body:

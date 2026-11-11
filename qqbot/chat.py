@@ -23,6 +23,7 @@ import time
 from .api import ApiError, QQOpenAPI
 from .config import Config
 from .llm import LLMClient, LLMError
+from .vision import fetch_image, image_block
 from .store import Store
 
 AT_TAG = re.compile(r"<@!?[0-9A-Za-z_\-]+>")
@@ -56,9 +57,14 @@ class ChatEngine:
         message_id = data.get("id") or ""
         content = (data.get("content") or "").strip()
         author = data.get("author") or {}
-        if not group or not message_id or not content:
+        if not group or not message_id:
             return
         if author.get("bot"):
+            return
+        images = [a for a in (data.get("attachments") or [])
+                  if str(a.get("content_type", "")).startswith("image/") and a.get("url")]
+        # 没文字也没图就不处理；只有图时允许走识别
+        if not content and not (images and self.cfg.vision_chat_enabled):
             return
         try:
             self.q.put_nowait((event, data))
@@ -76,6 +82,8 @@ class ChatEngine:
     def _handled_by_reply_rule(self, group: str, content: str) -> bool:
         """回复类规则优先：避免同一条消息既被规则回又被模型回。"""
         from .rules import Engine
+        if not self.store:
+            return False
         for row in self.store.list_rules(enabled_only=True):
             rule = dict(row)
             if rule.get("action") not in ("reply", "recall_reply"):
@@ -101,7 +109,7 @@ class ChatEngine:
         content = AT_TAG.sub("", data.get("content") or "")
         content = LEADING_AT.sub("", content).strip()
         data["_clean"] = content
-        if not content:
+        if not content and not (data.get("attachments") and self.cfg.vision_chat_enabled):
             return False
         if self._handled_by_reply_rule(data.get("group_openid") or "", content):
             return False
@@ -154,7 +162,20 @@ class ChatEngine:
         messages = [{"role": "system", "content": self.cfg.llm_system}]
         for row in self.store.chat_context(group, self.cfg.llm_context_turns):
             messages.append({"role": row["role"], "content": row["content"]})
-        messages.append({"role": "user", "content": question})
+        images = [a for a in (data.get("attachments") or [])
+                  if str(a.get("content_type", "")).startswith("image/") and a.get("url")]
+        if images and self.cfg.vision_chat_enabled:
+            try:
+                blob, mime = fetch_image(images[0]["url"], self.cfg.vision_max_bytes)
+                messages.append({"role": "user", "content": [
+                    {"type": "text", "text": question or "看看这张图，说说图上是什么"},
+                    image_block(blob, mime),
+                ]})
+            except Exception as exc:
+                print(f"[chat] 图片读取失败，改为纯文本: {exc}", flush=True)
+                messages.append({"role": "user", "content": question or "（对方发了一张图片，但你未能读取）"})
+        else:
+            messages.append({"role": "user", "content": question})
 
         try:
             answer, tokens = client.chat(messages)

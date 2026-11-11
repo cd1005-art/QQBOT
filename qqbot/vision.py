@@ -7,9 +7,39 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
+import time
 import urllib.error
 import urllib.request
+
+# 同一张图可能同时被「对话识别」和「合规审核」使用，缓存 5 分钟避免重复下载
+_CACHE: dict[str, tuple[float, bytes, str]] = {}
+_CACHE_TTL = 300
+
+
+def fetch_image(url: str, max_bytes: int = 8 * 1024 * 1024, timeout: int = 20) -> tuple[bytes, str]:
+    key = hashlib.sha1(url.encode()).hexdigest()
+    hit = _CACHE.get(key)
+    if hit and time.time() - hit[0] < _CACHE_TTL:
+        return hit[1], hit[2]
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        data = resp.read(max_bytes + 1)
+        mime = (resp.headers.get("Content-Type") or "image/jpeg").split(";")[0]
+    if len(data) > max_bytes:
+        raise ValueError(f"图片超过 {max_bytes} 字节上限")
+    _CACHE[key] = (time.time(), data, mime)
+    if len(_CACHE) > 60:
+        for k in sorted(_CACHE, key=lambda x: _CACHE[x][0])[:20]:
+            _CACHE.pop(k, None)
+    return data, mime
+
+
+def image_block(image: bytes, mime: str) -> dict:
+    """构造 /chat/completions 的多模态图片内容块。"""
+    return {"type": "image_url",
+            "image_url": {"url": f"data:{mime};base64,{base64.b64encode(image).decode()}"}}
 
 
 class VisionError(RuntimeError):

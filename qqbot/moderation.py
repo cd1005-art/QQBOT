@@ -19,7 +19,7 @@ import urllib.request
 from .api import ApiError, QQOpenAPI
 from .config import Config
 from .store import Store
-from .vision import VisionClient, VisionError, parse_verdict
+from .vision import VisionClient, VisionError, fetch_image, parse_verdict
 
 DEFAULT_PROMPT = (
     "你是群聊内容审核员。判断这张图片是否违反群规，重点关注：色情低俗、暴力血腥、赌博、"
@@ -73,14 +73,7 @@ class VisionEngine:
                 print(f"[vision] 处理失败: {type(exc).__name__}: {exc}", flush=True)
 
     def _download(self, url: str) -> tuple[bytes, str]:
-        limit = self.cfg.vision_max_bytes
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            data = resp.read(limit + 1)
-            ctype = (resp.headers.get("Content-Type") or "image/jpeg").split(";")[0]
-        if len(data) > limit:
-            raise ValueError(f"图片超过 {limit} 字节上限")
-        return data, ctype
+        return fetch_image(url, self.cfg.vision_max_bytes)
 
     def _handle(self, group: str, member: str, message_id: str, images: list):
         now = time.time()

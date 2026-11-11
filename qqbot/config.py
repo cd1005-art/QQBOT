@@ -58,6 +58,7 @@ class Config:
     reply_at_user: bool = False
     # 图片审核（视觉模型）
     vision_enabled: bool = False
+    vision_chat_enabled: bool = False
     vision_model: str = ""
     vision_base_url: str = ""
     vision_api_key: str = ""
@@ -141,6 +142,7 @@ def load(path: str | Path | None = None) -> Config:
         llm_keywords=[str(x) for x in llm.get("keywords", [])],
         reply_at_user=bool(reply.get("at_user", False)),
         vision_enabled=bool(vision.get("enabled", False)),
+        vision_chat_enabled=bool(vision.get("chat_enabled", False)),
         vision_model=str(vision.get("model", "")),
         vision_base_url=str(vision.get("base_url", "")),
         vision_api_key=str(vision.get("api_key", "")),

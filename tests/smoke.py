@@ -20,7 +20,7 @@ from qqbot.ingest import ingest  # noqa: E402
 from qqbot.rules import Engine  # noqa: E402
 from qqbot.scheduler import CronError, match, next_after, parse  # noqa: E402
 from qqbot.sign import Signer, derive_seed  # noqa: E402
-from qqbot.vision import parse_verdict  # noqa: E402
+from qqbot.vision import image_block, parse_verdict  # noqa: E402
 from qqbot.store import Store  # noqa: E402
 
 # 官方文档给出的校验样例
@@ -217,6 +217,31 @@ def check_verdict():
     return "视觉判定 JSON 解析（标准 / 代码块 / 噪声 / 无法解析）通过"
 
 
+def check_image_block():
+    blk = image_block(b"\x89PNG\r\n\x1a\n", "image/png")
+    assert blk["type"] == "image_url", blk
+    url = blk["image_url"]["url"]
+    assert url.startswith("data:image/png;base64,"), url[:40]
+
+    # 只有图片、没有文字时，@ 也能触发识别
+    cfg = Config(app_id="x", app_secret="y", llm_enabled=True, llm_api_key="k",
+                 vision_chat_enabled=True, llm_trigger="at")
+    eng = ChatEngine(cfg, store=None, api=None)
+    ev = {"content": "", "group_openid": "G1", "id": "IMG1",
+          "attachments": [{"content_type": "image/png", "url": "http://x/y.png"}]}
+    assert eng.should_reply("GROUP_AT_MESSAGE_CREATE", ev), "纯图片 @ 应触发识别"
+
+    # 全量消息模式下，mentions 里带 bot 也算 @
+    ev_at = dict(ev, mentions=[{"bot": True, "id": "1"}])
+    assert eng.should_reply("GROUP_MESSAGE_CREATE", ev_at), "mentions 含 bot 应触发识别"
+
+    cfg2 = Config(app_id="x", app_secret="y", llm_enabled=True, llm_api_key="k",
+                  vision_chat_enabled=False, llm_trigger="at")
+    eng2 = ChatEngine(cfg2, store=None, api=None)
+    assert not eng2.should_reply("GROUP_AT_MESSAGE_CREATE", ev), "关闭识别后纯图片不应触发"
+    return "图片识别：多模态块构造 / 纯图触发 / 开关生效 通过"
+
+
 def check_send_at():
     from qqbot.api import QQOpenAPI
     from qqbot.auth import TokenManager
@@ -259,6 +284,7 @@ def main() -> int:
     print(msg7)
     print(check_send_at())
     print(check_verdict())
+    print(check_image_block())
     print("smoke ok")
     return 0
 

@@ -178,7 +178,13 @@ journalctl -u qqbot -f</pre>
   <p>回复走被动消息（带原 <code>msg_id</code>），受平台 5 分钟 / 5 次窗口限制；超窗口会失败并记入审计，不会退化成主动消息刷屏。</p>
 
   <h2 id="vision">图片识别与审核</h2>
-  <p>群图片事件带签名下载地址，服务端直接拉取后交给视觉模型判断，命中违规即按配置撤回、禁言或仅记录。</p>
+  <p><b>这是两件事，两个开关：</b>识别用于对话（@机器人 发图才送模型），审核用于合规（群里每张图都判断）。两者共用模型与下载缓存。</p>
+  <table>
+    <tr><th>开关</th><th>作用</th><th>触发条件</th></tr>
+    <tr><td><code>chat_enabled</code></td><td>模型看懂图片并参与回答</td><td>@机器人 或命中触发词</td></tr>
+    <tr><td><code>enabled</code></td><td>判断违规并撤回/禁言</td><td>群里每张图片</td></tr>
+  </table>
+  <p>审核配置如下，识别只需一个开关：</p>
   <table>
     <tr><th>配置</th><th>说明</th></tr>
     <tr><td><code>model</code> / <code>base_url</code> / <code>api_key</code></td><td>留空则跟随 <code>[llm]</code>；模型必须支持图像输入</td></tr>

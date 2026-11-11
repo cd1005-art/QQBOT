@@ -59,6 +59,8 @@ enabled = false
 model = ""
 base_url = ""
 api_key = ""
+# 图片识别：让模型看懂图，用于群聊问答（与审核独立开关）
+chat_enabled = false
 # 违规动作：recall | mute | recall_mute | none
 action = "recall_mute"
 minutes = 10

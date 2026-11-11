@@ -663,7 +663,9 @@ async function viewSettings() {
         </div>
       </div>
       <div class="row mt12" style="border-top:1px solid var(--line);padding-top:12px">
-        <span style="font-size:12.5px;color:var(--sub)">模型</span>
+        <span style="font-size:12.5px;color:var(--sub)">图片识别</span>
+        <span class="badge ${v.chat_enabled ? "ok" : ""}">${v.chat_enabled ? "已启用" : "未启用"}</span>
+        <span style="font-size:12.5px;color:var(--sub);margin-left:14px">模型</span>
         <span class="mono" style="font-size:12.5px">${esc(v.model || "-")}</span>
         <span class="sp" style="flex:1"></span>
         <a href="#/rules" style="font-size:12.5px">调整参数 →</a>
@@ -727,6 +729,21 @@ async function viewRules() {
   $("#main").innerHTML = `<div class="topbar"><h1>规则</h1><span class="sp"></span>
     <span class="meta">命中即处置，处置结果写入「处置记录」</span>
     <button class="btn pri" onclick="toggleRuleForm()">新建规则</button></div>
+    <div class="panel" id="visionChatCard"><div class="panel-h">图片识别<span class="sp"></span>
+      <span class="hint">让模型看懂图，参与群聊回答</span></div>
+      <div class="panel-b">
+        <div class="row" style="justify-content:space-between">
+          <div>
+            <b style="font-size:13px">对话时理解图片</b>
+            <div class="hint" style="color:var(--muted);font-size:12px">
+              开启后，@机器人 发图（或图配文字）会把图片一起交给模型；关闭则只按文字回答。</div>
+          </div>
+          <label style="display:flex;gap:8px;align-items:center;font-size:13px">
+            <input type="checkbox" id="vChatOn" style="width:auto" onchange="saveVisionLite()"> 启用识别</label>
+        </div>
+      </div>
+    </div>
+
     <div class="panel" id="visionCard"><div class="panel-h">图片审核<span class="sp"></span>
       <span class="hint">视觉模型判断违规，命中即处置</span></div>
       <div class="panel-b">
@@ -800,6 +817,7 @@ async function loadVision() {
   if (!j.ok) return;
   const d = j.data;
   $("#vOn").checked = !!d.enabled;
+  $("#vChatOn").checked = !!d.chat_enabled;
   $("#vModel").value = d.model_custom ? d.model : "";
   $("#vModel").placeholder = d.model_custom ? "" : `留空跟随：${d.model || "-"}`;
   $("#vAction").value = d.action || "recall_mute";
@@ -810,8 +828,16 @@ async function loadVision() {
   loadVisionResults();
 }
 
+async function saveVisionLite() {
+  const j = await api("/panel/api/vision", { method: "POST",
+    body: JSON.stringify({ chat_enabled: $("#vChatOn").checked }) });
+  if (j.ok) toast(`图片识别已${$("#vChatOn").checked ? "开启" : "关闭"}`, "ok");
+  else { toast(j.error || "保存失败", "bad"); $("#vChatOn").checked = !$("#vChatOn").checked; }
+}
+
 async function saveVision() {
-  const body = { enabled: $("#vOn").checked, model: $("#vModel").value.trim(),
+  const body = { enabled: $("#vOn").checked, chat_enabled: $("#vChatOn").checked,
+    model: $("#vModel").value.trim(),
     action: $("#vAction").value, minutes: parseInt($("#vMinutes").value || "10", 10),
     notice: $("#vNotice").value.trim(), prompt: $("#vPrompt").value.trim() };
   const j = await api("/panel/api/vision", { method: "POST", body: JSON.stringify(body) });

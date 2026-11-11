@@ -257,9 +257,11 @@ class ChatEngine:
             return
         group = conv or data.get("group_openid") or ""
         message_id = data["id"]
+        member = ((data.get("author") or {}).get("member_openid")
+                  or (data.get("author") or {}).get("user_openid")
+                  or (data.get("author") or {}).get("id") or "")
         if scene == "c2c" and not member:
             member = conv   # 私聊没有 member_openid，用 user_openid 当标识
-        member = (data.get("author") or {}).get("member_openid") or ""
         question = data["_clean"]
 
         # 去重：平台重推不重复回复
@@ -279,7 +281,7 @@ class ChatEngine:
             prompt = imagegen.detect(question)
             if prompt:
                 self._generate_image(group, member, message_id, prompt, question,
-                                     imagegen.parse_size(question, cfg.imagegen_size), scene)
+                                     imagegen.parse_size(question, self.cfg.imagegen_size), scene)
                 return
 
         # 2) 找图意图，直接发图，不走模型（群聊/私聊都支持）

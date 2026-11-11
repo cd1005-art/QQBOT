@@ -690,11 +690,18 @@ async function viewRules() {
         <label class="field" style="margin:0;width:130px"><span>匹配方式</span>
           <select id="rType"><option value="contains">包含</option><option value="regex">正则</option></select></label>
         <label class="field grow" style="margin:0"><span>匹配内容</span><input id="rPattern" placeholder="广告 / 加群 / https?://"></label>
-        <label class="field" style="margin:0;width:150px"><span>动作</span>
-          <select id="rAction" onchange="syncMinutes()"><option value="recall">撤回</option>
-          <option value="mute">禁言</option><option value="recall_mute">撤回 + 禁言</option></select></label>
+        <label class="field" style="margin:0;width:170px"><span>动作</span>
+          <select id="rAction" onchange="syncMinutes()">
+            <option value="recall">撤回</option>
+            <option value="mute">禁言</option>
+            <option value="recall_mute">撤回 + 禁言</option>
+            <option value="reply">关键词回复</option>
+            <option value="recall_reply">撤回 + 回复</option>
+          </select></label>
         <label class="field" style="margin:0;width:110px"><span>禁言分钟</span><input id="rMinutes" value="10" disabled></label>
       </div>
+      <label class="field mt12 hide" id="rReplyWrap"><span>回复内容（被动回复，随原消息发出）</span>
+        <textarea id="rReply" placeholder="例如：本群禁止发广告，请自重。"></textarea></label>
       <div class="mt12" style="font-size:12px;color:var(--sub);margin-bottom:6px">作用群（不勾选 = 全部群）</div>
       <div id="rGroups" class="row" style="gap:14px"></div>
       <div class="row mt12">
@@ -718,7 +725,10 @@ async function viewRules() {
 function toggleRuleForm() { $("#ruleForm").classList.toggle("hide"); }
 function syncMinutes() {
   const a = $("#rAction").value;
-  $("#rMinutes").disabled = a === "recall";
+  const needMute = a === "mute" || a === "recall_mute";
+  const needReply = a === "reply" || a === "recall_reply";
+  $("#rMinutes").disabled = !needMute;
+  $("#rReplyWrap").classList.toggle("hide", !needReply);
 }
 function ruleGroups() { return $$(".rg:checked").map(x => x.value); }
 
@@ -733,13 +743,15 @@ async function testRule() {
 async function createRule() {
   const body = { name: $("#rName").value.trim(), match_type: $("#rType").value,
     pattern: $("#rPattern").value.trim(), action: $("#rAction").value,
-    minutes: parseInt($("#rMinutes").value || "10", 10), groups: ruleGroups() };
+    minutes: parseInt($("#rMinutes").value || "10", 10),
+    reply: $("#rReply").value.trim(), groups: ruleGroups() };
   const j = await api("/panel/api/rules", { method: "POST", body: JSON.stringify(body) });
   if (j.ok) { toast("规则已创建", "ok"); $("#ruleForm").classList.add("hide"); loadRules(); }
   else toast(j.error || "创建失败", "bad");
 }
 
-const ACTION_TEXT = { recall: "撤回", mute: "禁言", recall_mute: "撤回+禁言" };
+const ACTION_TEXT = { recall: "撤回", mute: "禁言", recall_mute: "撤回+禁言",
+                      reply: "回复", recall_reply: "撤回+回复" };
 
 async function loadRules() {
   const j = await api("/panel/api/rules");
@@ -755,7 +767,7 @@ async function loadRules() {
         <td>${esc(r.name)}</td>
         <td>${r.match_type === "regex" ? "正则" : "包含"}</td>
         <td class="mono">${esc(r.pattern)}</td>
-        <td>${ACTION_TEXT[r.action] || esc(r.action)}${r.action !== "recall" ? `<span class="muted" style="font-size:11px"> ${params.minutes || 10}m</span>` : ""}</td>
+        <td>${ACTION_TEXT[r.action] || esc(r.action)}${["mute", "recall_mute"].includes(r.action) ? `<span class="muted" style="font-size:11px"> ${params.minutes || 10}m</span>` : ""}${["reply", "recall_reply"].includes(r.action) ? `<div class="muted" style="font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">“${esc(params.reply || "")}”</div>` : ""}</td>
         <td style="color:var(--muted);font-size:12px">${groups.length ? groups.length + " 个群" : "全部"}</td>
         <td class="num">${r.hits}</td>
         <td style="color:var(--muted)">${r.last_hit_at ? ago(r.last_hit_at) : "-"}</td>

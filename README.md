@@ -36,7 +36,7 @@ QQ 平台 --HTTPS POST--> https://你的域名/qqbot/webhook
 | 入群申请列表 / 审批 | 可用 |
 | 群信息 / 机器人群内状态 | 可用 |
 | Web 控制台（总览 / 群管理 / 规则 / 定时 / 事件 / 审计 / 设置） | 可用 |
-| 关键词自动处置（撤回 / 禁言 / 撤回+禁言） | 可用 |
+| 关键词自动处置（撤回 / 禁言 / 撤回+禁言 / 关键词回复 / 撤回+回复） | 可用 |
 | 定时任务（cron，多群，执行历史） | 可用 |
 | 群级自动处置开关 | 可用 |
 | 大模型群聊对话（任意 OpenAI 兼容接口） | 可用，需自填 key |
@@ -145,10 +145,13 @@ python -m qqbot at-all  --group <g> --text "内容"
 
 ```
 match_type = contains | regex
-action     = recall | mute | recall_mute
-params     = {"minutes": 10}
+action     = recall | mute | recall_mute | reply | recall_reply
+params     = {"minutes": 10, "reply": "命中后回复的文本"}
 groups     = []                  # 空 = 全部群
 ```
+
+- `reply` / `recall_reply` 走被动回复（带原 `msg_id`），受 5 分钟 / 5 次窗口限制
+- 回复类规则优先于模型对话：同一条消息命中回复规则后，不再交给大模型，避免双重回复
 
 - 同一 `(rule_id, message_id)` 只处置一次，平台重推不会重复禁言
 - `dry_run = true` 时只记一条「未执行」的处置记录，不调接口

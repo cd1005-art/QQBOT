@@ -239,13 +239,18 @@ class Panel:
         pattern = (body.get("pattern") or "").strip()
         action = body.get("action") or "recall"
         minutes = int(body.get("minutes") or 10)
+        reply = (body.get("reply") or "").strip()
         groups = [g for g in (body.get("groups") or []) if g]
         if not name or not pattern:
             raise ValueError("名称与匹配内容必填")
         if match_type not in ("contains", "regex"):
             raise ValueError("match_type 只能是 contains 或 regex")
-        if action not in ("recall", "mute", "recall_mute"):
-            raise ValueError("action 只能是 recall / mute / recall_mute")
+        if action not in ("recall", "mute", "recall_mute", "reply", "recall_reply"):
+            raise ValueError("action 只能是 recall / mute / recall_mute / reply / recall_reply")
+        if action in ("reply", "recall_reply") and not reply:
+            raise ValueError("回复类规则必须填写回复内容")
+        if len(reply) > 400:
+            raise ValueError("回复内容不超过 400 字")
         if match_type == "regex":
             import re as _re
             try:
@@ -256,7 +261,7 @@ class Panel:
             raise ValueError("禁言时长 1~43200 分钟")
 
         rid = self.store.add_rule(name, match_type, pattern, action,
-                                  json.dumps({"minutes": minutes}, ensure_ascii=False),
+                                  json.dumps({"minutes": minutes, "reply": reply}, ensure_ascii=False),
                                   json.dumps(groups, ensure_ascii=False))
         self.store.log_action("rule-add", None, str(rid), json.dumps(body, ensure_ascii=False), True, "created")
         return {"id": rid}

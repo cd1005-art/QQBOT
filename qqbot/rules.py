@@ -19,7 +19,7 @@ from .api import ApiError, QQOpenAPI
 from .config import Config
 from .store import Store
 
-CACHE_TTL = 5.0
+CACHE_TTL = 2.0
 
 
 class Engine:
@@ -38,6 +38,10 @@ class Engine:
 
     def start(self):
         self._thread.start()
+
+    def invalidate(self):
+        """规则变更后立即失效缓存（面板新建规则时调用）。"""
+        self._rules_at = 0.0
 
     def stop(self):
         self._stop.set()
@@ -120,7 +124,9 @@ class Engine:
 
     def _apply(self, rule: dict, group: str, member: str, message_id: str, content: str):
         action = rule.get("action") or "recall"
-        minutes = int((rule.get("params_obj") or {}).get("minutes") or 10)
+        params = rule.get("params_obj") or {}
+        minutes = int(params.get("minutes") or 10)
+        reply_text = (params.get("reply") or "").strip()
         self.store.bump_rule(rule["id"])
 
         if self.cfg.dry_run:
@@ -131,7 +137,7 @@ class Engine:
 
         results = []
         ok_all = True
-        if action in ("recall", "recall_mute") and message_id:
+        if action in ("recall", "recall_mute", "recall_reply") and message_id:
             try:
                 st, _ = self.api.recall_message(group, message_id)
                 self.store.mark_recalled(message_id)
@@ -146,6 +152,14 @@ class Engine:
             except ApiError as exc:
                 ok_all = False
                 results.append(f"mute 失败: {exc.code} {exc.message}")
+        if action in ("reply", "recall_reply") and reply_text and message_id:
+            try:
+                # 被动回复：带原 msg_id，受 5 分钟 / 5 次窗口限制
+                st, _ = self.api.send_message(group, reply_text, msg_id=message_id)
+                results.append(f"reply HTTP {st}")
+            except ApiError as exc:
+                ok_all = False
+                results.append(f"reply 失败: {exc.code} {exc.message}")
 
         result = "; ".join(results) or "无动作"
         self.store.log_disposal(rule["id"], group, member, message_id, action, ok_all, result)

@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import json
 import queue
 import re
 import threading
@@ -72,11 +73,37 @@ class ChatEngine:
         mentions = data.get("mentions") or []
         return any(m.get("bot") for m in mentions if isinstance(m, dict))
 
+    def _handled_by_reply_rule(self, group: str, content: str) -> bool:
+        """回复类规则优先：避免同一条消息既被规则回又被模型回。"""
+        from .rules import Engine
+        for row in self.store.list_rules(enabled_only=True):
+            rule = dict(row)
+            if rule.get("action") not in ("reply", "recall_reply"):
+                continue
+            try:
+                scope = json.loads(rule.get("groups") or "[]")
+            except Exception:
+                scope = []
+            if scope and group not in scope:
+                continue
+            params = {}
+            try:
+                params = json.loads(rule.get("params") or "{}")
+            except Exception:
+                params = {}
+            if not (params.get("reply") or "").strip():
+                continue
+            if Engine.matches(rule, content):
+                return True
+        return False
+
     def should_reply(self, event: str, data: dict) -> bool:
         content = AT_TAG.sub("", data.get("content") or "")
         content = LEADING_AT.sub("", content).strip()
         data["_clean"] = content
         if not content:
+            return False
+        if self._handled_by_reply_rule(data.get("group_openid") or "", content):
             return False
         if any(k and k in content for k in (self.cfg.llm_keywords or [])):
             return True

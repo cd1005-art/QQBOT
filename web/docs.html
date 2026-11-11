@@ -145,7 +145,8 @@ journalctl -u qqbot -f</pre>
   </table>
 
   <h2 id="rules">规则与自动处置</h2>
-  <p>匹配方式两种：<code>contains</code>（包含，忽略大小写）与 <code>regex</code>（正则，保存时校验语法）。动作三种：<code>recall</code>、<code>mute</code>、<code>recall_mute</code>。</p>
+  <p>匹配方式两种：<code>contains</code>（包含，忽略大小写）与 <code>regex</code>（正则，保存时校验语法）。动作五种：<code>recall</code>、<code>mute</code>、<code>recall_mute</code>、<code>reply</code>、<code>recall_reply</code>。</p>
+  <p><code>reply</code> 与 <code>recall_reply</code> 用于关键词固定回复，回复走被动消息（带原 <code>msg_id</code>），受 5 分钟 / 5 次窗口限制；同一条消息命中回复规则后不再交给大模型，避免双重回复。</p>
   <ul>
     <li>同一条消息同一条规则只处置一次，平台重推不会重复禁言</li>
     <li>规则表 5 秒缓存，改完不用重启</li>

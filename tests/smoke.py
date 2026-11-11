@@ -101,6 +101,52 @@ def check_rules(store: Store):
     return "规则匹配 / 命中计数 / dry_run 留痕 通过"
 
 
+class FakeAPI:
+    """记录调用，不联网。"""
+    def __init__(self):
+        self.calls = []
+
+    def send_message(self, group, text, msg_id=None, msg_seq=1):
+        self.calls.append(("reply", group, text, msg_id))
+        return 200, {"id": "FAKE"}
+
+    def recall_message(self, group, message_id):
+        self.calls.append(("recall", group, message_id, None))
+        return 200, {}
+
+    def mute_member(self, group, member, minutes):
+        self.calls.append(("mute", group, member, minutes))
+        return 200, {}
+
+
+def check_reply_rule(store: Store):
+    cfg = Config(app_id="x", app_secret="y", dry_run=False, llm_enabled=False)
+    api = FakeAPI()
+    eng = Engine(cfg, store, api=api)
+    rid = store.add_rule("喊我就答", "contains", "小助手", "reply",
+                         '{"reply": "我在，有事直说"}', "[]")
+    eng._evaluate("G1", "M1", "MSG-REPLY", "小助手在吗")
+    assert ("reply", "G1", "我在，有事直说", "MSG-REPLY") in api.calls, api.calls
+    ds = store.recent_disposals(3)
+    assert ds[0]["rule_id"] == rid and ds[0]["ok"] == 1, ds
+    assert "reply HTTP 200" in (ds[0]["result"] or ""), ds[0]["result"]
+
+    # 同一条消息重复进来不应重复回复
+    before = len(api.calls)
+    eng._evaluate("G1", "M1", "MSG-REPLY", "小助手在吗")
+    assert len(api.calls) == before, "重复消息被重复回复"
+
+    # 撤回+回复同时执行
+    api.calls.clear()
+    store.add_rule("先撤后答", "contains", "广告", "recall_reply",
+                   '{"reply": "禁止发广告"}', "[]")
+    eng.invalidate()  # 规则缓存 2 秒，测试里立即生效
+    eng._evaluate("G1", "M2", "MSG-AD", "这是广告")
+    kinds = sorted(c[0] for c in api.calls)
+    assert kinds == ["recall", "reply"], api.calls
+    return "关键词回复 / 撤回+回复 / 重复去重 通过"
+
+
 def check_schedules(store: Store):
     sid = store.add_schedule("每日公告", "0 9 * * *", "早上好")
     assert any(r["id"] == sid for r in store.list_schedules())
@@ -157,6 +203,7 @@ def main() -> int:
         msg4 = check_rules(store)
         msg5 = check_schedules(store)
         msg6 = check_chat(store)
+        msg7 = check_reply_rule(store)
     print(msg1)
     print(msg2)
     print(msg3)
@@ -164,6 +211,7 @@ def main() -> int:
     print(msg4)
     print(msg5)
     print(msg6)
+    print(msg7)
     print("smoke ok")
     return 0
 

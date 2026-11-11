@@ -184,6 +184,16 @@ async function viewDashboard() {
     </div>`;
 }
 
+function groupLabel(g) {
+  const t = (g.title || "").trim();
+  const short = g.group_openid ? g.group_openid.slice(0, 8) + "…" : "";
+  return t ? `${t}（${short}）` : short;
+}
+function groupName(gid) {
+  const g = (state.groups || []).find(x => x.group_openid === gid);
+  return g && g.title ? `${g.title}（${gid.slice(0, 8)}…）` : gid.slice(0, 10) + "…";
+}
+
 function card(k, v, d) {
   return `<div class="card"><div class="k">${esc(k)}</div><div class="v">${v == null ? 0 : v}</div>
     <div class="d">${esc(d || "")}</div></div>`;
@@ -226,10 +236,11 @@ async function viewGroups() {
   if (!state.group || !state.groups.some(g => g.group_openid === state.group)) state.group = state.groups[0].group_openid;
   $("#main").innerHTML = `
     <div class="topbar"><h1>群管理</h1><span class="sp"></span>
-      <select id="gsel" style="width:auto;min-width:280px" onchange="state.group=this.value;state.gtab='overview';loadGroup()">
-        ${state.groups.map(g => `<option value="${g.group_openid}" ${g.group_openid === state.group ? "selected" : ""}>${esc(g.group_openid)}（成员 ${g.members} · 消息 ${g.messages}）</option>`).join("")}
+      <select id="gsel" style="width:auto;min-width:280px" onchange="state.group=this.value;state.gtab='overview';loadGroup();if($('#gidHint'))$('#gidHint').textContent=this.value">
+        ${state.groups.map(g => `<option value="${g.group_openid}" title="${esc(g.group_openid)}" ${g.group_openid === state.group ? "selected" : ""}>${esc(groupLabel(g))}　成员 ${g.members} · 消息 ${g.messages}</option>`).join("")}
       </select>
       <button class="btn sm" onclick="loadGroup()">刷新</button>
+      <span class="meta mono" id="gidHint" style="color:var(--muted);font-size:11.5px"></span>
     </div>
     <div id="gtabs" class="panel" style="margin-bottom:16px">
       <div class="tabs">
@@ -238,11 +249,14 @@ async function viewGroups() {
       </div>
       <div id="gbody">${skeleton(4)}</div>
     </div>`;
+  $("#gidHint").textContent = state.group ? state.group : "";
   loadGroup();
 }
 
 async function loadGroup() {
   const g = state.group;
+  const hint = document.getElementById("gidHint");
+  if (hint) hint.textContent = g || "";
   $("#gtabs .tabs").innerHTML = [["overview", "概览"], ["members", "成员"], ["messages", "消息"], ["disposal", "处置"]]
     .map(([k, n]) => `<button data-tab="${k}" class="${state.gtab === k ? "on" : ""}" onclick="state.gtab='${k}';loadGroup()">${n}</button>`).join("");
   $("#gbody").innerHTML = skeleton(4);
@@ -264,7 +278,7 @@ async function groupOverview(g) {
     <div class="panel-b">
       <div class="row" style="justify-content:space-between;align-items:flex-start">
         <div>
-          <div style="font-size:16px;font-weight:600;margin-bottom:4px">${esc(info.group_name || "未知群")}</div>
+          <div style="font-size:16px;font-weight:600;margin-bottom:4px">${esc(info.group_name || groupName(g))}</div>
           <div class="meta" style="color:var(--muted);font-size:12.5px">
             群人数 ${info.group_member_num ?? "-"} · 分类 ${esc(info.group_class_text || "-")}
             ${st.member_role ? ` · 机器人角色 <span class="badge ${st.member_role === "admin" ? "ok" : ""}">${esc(st.member_role)}</span>` : ""}
@@ -693,8 +707,8 @@ async function viewRules() {
   state.groups = g.ok ? g.data : [];
   $("#rGroups").innerHTML = state.groups.length
     ? state.groups.map(x => `<label style="display:flex;gap:6px;align-items:center;font-size:12.5px">
-        <input type="checkbox" class="rg" value="${esc(x.group_openid)}" style="width:auto">
-        <span class="mono">${esc(x.group_openid.slice(0, 12))}…</span></label>`).join("")
+        <input type="checkbox" class="rg" value="${esc(x.group_openid)}" style="width:auto" title="${esc(x.group_openid)}">
+        <span>${esc(groupLabel(x))}</span></label>`).join("")
     : '<span class="hint" style="color:var(--muted);font-size:12px">暂无群</span>';
   loadRules();
 }
@@ -784,8 +798,8 @@ async function viewSchedules() {
   state.groups = g.ok ? g.data : [];
   $("#sGroups").innerHTML = state.groups.length
     ? state.groups.map(x => `<label style="display:flex;gap:6px;align-items:center;font-size:12.5px">
-        <input type="checkbox" class="sg" value="${esc(x.group_openid)}" style="width:auto">
-        <span class="mono">${esc(x.group_openid.slice(0, 12))}…</span></label>`).join("")
+        <input type="checkbox" class="sg" value="${esc(x.group_openid)}" style="width:auto" title="${esc(x.group_openid)}">
+        <span>${esc(groupLabel(x))}</span></label>`).join("")
     : '<span class="hint" style="color:var(--muted);font-size:12px">暂无群</span>';
   loadSchedules();
 }

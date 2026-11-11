@@ -211,7 +211,8 @@ def main(argv: list[str] | None = None) -> int:
             elif not rows:
                 print("库里还没有群记录。先跑 serve，再在群里发一条消息。")
             for r in rows:
-                print(f"{r['group_openid']}  成员{r['members']:<4} 消息{r['messages']:<5} 最近={r['last_seen']}")
+                name = r["title"] or "(未取到群名)"
+                print(f"{name:<18} {r['group_openid']}  成员{r['members']:<4} 消息{r['messages']:<5}")
             return 0
 
         if cmd == "members":

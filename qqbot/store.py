@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS groups (
     group_openid TEXT PRIMARY KEY,
     first_seen   INTEGER NOT NULL,
     last_seen    INTEGER NOT NULL,
-    note         TEXT
+    note         TEXT,
+    title        TEXT
 );
 CREATE TABLE IF NOT EXISTS members (
     group_openid  TEXT NOT NULL,
@@ -130,6 +131,10 @@ class Store:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA synchronous=NORMAL")
             conn.executescript(SCHEMA)
+            # 老库补列：群名不从事件推送，需要调用 info 接口后缓存
+            cols = [r["name"] for r in conn.execute("PRAGMA table_info(groups)").fetchall()]
+            if "title" not in cols:
+                conn.execute("ALTER TABLE groups ADD COLUMN title TEXT")
 
     @contextmanager
     def _conn(self):
@@ -196,10 +201,24 @@ class Store:
 
     # ---------------- 查询 ----------------
 
+    def set_group_title(self, group_openid: str, title: str):
+        if not title:
+            return
+        with self._conn() as conn:
+            conn.execute("UPDATE groups SET title=? WHERE group_openid=? AND "
+                         "(title IS NULL OR title<>?)", (title, group_openid, title))
+
+    def groups_missing_title(self, limit: int = 8) -> list[str]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT group_openid FROM groups WHERE title IS NULL OR title='' LIMIT ?",
+                (limit,)).fetchall()
+        return [r["group_openid"] for r in rows]
+
     def list_groups(self) -> list[sqlite3.Row]:
         with self._conn() as conn:
             return conn.execute(
-                "SELECT g.group_openid, g.last_seen, "
+                "SELECT g.group_openid, g.title, g.last_seen, "
                 "(SELECT COUNT(*) FROM members m WHERE m.group_openid=g.group_openid) AS members, "
                 "(SELECT COUNT(*) FROM messages x WHERE x.group_openid=g.group_openid) AS messages "
                 "FROM groups g ORDER BY g.last_seen DESC").fetchall()

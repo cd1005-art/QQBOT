@@ -1,9 +1,20 @@
-"""config.toml 定点修改：只替换目标行，保留注释与其他内容。"""
+"""config.toml 定点修改：整段批量替换 + 原子落盘 + 串行化。
+
+为什么必须原子写：
+    面板保存是「读文件 → 改内存 → 写回」。两个请求同时保存时，一个请求可能
+    读到另一个请求刚被 open('w') 截断的半截文件，再把残缺内容写回去，
+    配置文件就永久损坏（本次线上故障的真实原因）。
+    因此这里统一：临时文件 + os.replace 原子替换，并用进程内锁串行化。
+"""
 
 from __future__ import annotations
 
-import re
+import os
+import tempfile
+import threading
 from pathlib import Path
+
+_LOCK = threading.Lock()
 
 
 def _toml_value(v) -> str:
@@ -17,41 +28,62 @@ def _toml_value(v) -> str:
     return f'"{s}"'
 
 
-def patch(path: str | Path, section: str, key: str, value) -> bool:
-    """把 [section] 下的 key 改成 value。成功返回 True。
+def _atomic_write(path: Path, text: str):
+    fd, tmp = tempfile.mkstemp(prefix=".cfg-", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(text)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
-    逐行处理，不重排、不丢注释；section 不存在时追加到文件末尾。
-    """
+
+def patch_many(path: str | Path, section: str, items: dict) -> bool:
+    """一次性把 [section] 下的多个 key 写入，只读一次、只写一次。"""
     p = Path(path)
-    lines = p.read_text(encoding="utf-8").splitlines()
-    out: list[str] = []
-    in_section = False
-    section_seen = False
-    done = False
-    line_re = re.compile(rf"^\s*{re.escape(key)}\s*=")
+    with _LOCK:
+        lines = p.read_text(encoding="utf-8").splitlines()
+        pending = dict(items)
+        out: list[str] = []
+        in_section = False
+        section_seen = False
 
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("[") and stripped.endswith("]"):
-            # 离开上一个 section 时，若还没写就补在它末尾
-            if in_section and not done:
-                out.append(f"{key} = {_toml_value(value)}")
-                done = True
-            in_section = stripped[1:-1].strip() == section
-            section_seen = section_seen or in_section
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("[") and stripped.endswith("]"):
+                if in_section:
+                    for k, v in pending.items():
+                        out.append(f"{k} = {_toml_value(v)}")
+                    pending.clear()
+                in_section = stripped[1:-1].strip() == section
+                section_seen = section_seen or in_section
+                out.append(line)
+                continue
+            if in_section and "=" in line:
+                key = line.split("=", 1)[0].strip()
+                if key in pending:
+                    out.append(f"{key} = {_toml_value(pending.pop(key))}")
+                    continue
             out.append(line)
-            continue
-        if in_section and line_re.match(line):
-            out.append(f"{key} = {_toml_value(value)}")
-            done = True
-            continue
-        out.append(line)
 
-    if in_section and not done:
-        out.append(f"{key} = {_toml_value(value)}")
-        done = True
-    if not section_seen:
-        out += ["", f"[{section}]", f"{key} = {_toml_value(value)}"]
+        # 文件末尾仍在该段内：补在段尾
+        if in_section:
+            for k, v in pending.items():
+                out.append(f"{k} = {_toml_value(v)}")
+            pending.clear()
+        # 整段不存在：新建
+        if not section_seen:
+            out += ["", f"[{section}]"]
+        for k, v in pending.items():
+            out.append(f"{k} = {_toml_value(v)}")
 
-    p.write_text("\n".join(out) + "\n", encoding="utf-8")
-    return True
+        _atomic_write(p, "\n".join(out) + "\n")
+        return True
+
+
+def patch(path: str | Path, section: str, key: str, value) -> bool:
+    return patch_many(path, section, {key: value})

@@ -42,6 +42,7 @@ class Panel:
         self.tokens = tokens
         self.api = api
         self._key = hashlib.sha256((cfg.app_secret or "no-secret").encode()).digest()
+        self._title_fail: dict[str, float] = {}
 
     # ---------------- 会话 ----------------
 
@@ -80,11 +81,33 @@ class Panel:
             "hourly": self.store.hourly_messages(None, 24),
         }
 
+    def sync_group_titles(self, limit: int = 8):
+        """群名只能查 info 接口拿到，拉过就缓存；失败记 10 分钟，避免每次加载都重试。"""
+        now = time.time()
+        for g in self.store.groups_missing_title(limit):
+            if now - self._title_fail.get(g, 0) < 600:
+                continue
+            try:
+                _, info = self.api.request("GET", f"/v2/groups/{g}/info")
+                title = info.get("group_name") or ""
+                if title:
+                    self.store.set_group_title(g, title)
+                else:
+                    self._title_fail[g] = now
+            except (ApiError, AuthError) as exc:
+                self._title_fail[g] = now
+                print(f"[panel] 取群名失败 {g[:8]}…: {exc}", flush=True)
+
+    def groups(self) -> list[dict]:
+        self.sync_group_titles()
+        return [dict(r) for r in self.store.list_groups()]
+
     def group_detail(self, g: str) -> dict:
         out: dict = {"group_openid": g, "info": None, "state": None, "error": None}
         try:
             _, info = self.api.request("GET", f"/v2/groups/{g}/info")
             out["info"] = info
+            self.store.set_group_title(g, info.get("group_name") or "")
         except ApiError as exc:
             out["error"] = str(exc)
         try:
@@ -112,42 +135,47 @@ class Panel:
         }
 
     def save_llm(self, body: dict) -> dict:
-        path = self.cfg.source_path
+        """整段一次性写盘：多次 patch 会产生「读-改-写」竞态，已出过事故。"""
         c = self.cfg
+        items: dict = {}
+
         if "base_url" in body:
             c.llm_base_url = str(body["base_url"]).strip() or c.llm_base_url
-            cfgedit.patch(path, "llm", "base_url", c.llm_base_url)
+            items["base_url"] = c.llm_base_url
         key = (body.get("api_key") or "").strip()
         if key and not key.startswith("****"):
             c.llm_api_key = key
-            cfgedit.patch(path, "llm", "api_key", key)
+            items["api_key"] = key
         if "model" in body:
             c.llm_model = str(body["model"]).strip() or c.llm_model
-            cfgedit.patch(path, "llm", "model", c.llm_model)
+            items["model"] = c.llm_model
         if "system" in body:
             c.llm_system = str(body["system"]).strip() or c.llm_system
-            cfgedit.patch(path, "llm", "system", c.llm_system)
+            items["system"] = c.llm_system
         if "trigger" in body:
             trig = str(body["trigger"])
             if trig not in ("at", "all"):
                 raise ValueError("trigger 只能是 at 或 all")
             c.llm_trigger = trig
-            cfgedit.patch(path, "llm", "trigger", trig)
+            items["trigger"] = trig
         for field_name, attr, cast in (
-            ("max_tokens", "llm_max_tokens", int), ("temperature", "llm_temperature", float),
-            ("context_turns", "llm_context_turns", int), ("cooldown", "llm_cooldown", int),
-            ("daily_limit", "llm_daily_limit", int)):
+                ("max_tokens", "llm_max_tokens", int), ("temperature", "llm_temperature", float),
+                ("context_turns", "llm_context_turns", int), ("cooldown", "llm_cooldown", int),
+                ("daily_limit", "llm_daily_limit", int)):
             if field_name in body:
                 val = cast(body[field_name])
                 setattr(c, attr, val)
-                cfgedit.patch(path, "llm", field_name, val)
+                items[field_name] = val
         if "keywords" in body:
             kws = [k.strip() for k in str(body["keywords"]).replace("，", ",").split(",") if k.strip()]
             c.llm_keywords = kws
-            cfgedit.patch(path, "llm", "keywords", kws)
+            items["keywords"] = kws
         if "enabled" in body:
             c.llm_enabled = bool(body["enabled"])
-            cfgedit.patch(path, "llm", "enabled", c.llm_enabled)
+            items["enabled"] = c.llm_enabled
+
+        if items:
+            cfgedit.patch_many(c.source_path, "llm", items)
         self.store.log_action("llm-save", None, None,
                               json.dumps({k: v for k, v in body.items() if k != "api_key"},
                                          ensure_ascii=False), True, "saved")
@@ -189,9 +217,9 @@ class Panel:
         if len(password) < 6:
             raise ValueError("面板密码至少 6 位")
 
-        cfgedit.patch(self.cfg.source_path, "bot", "app_id", app_id)
-        cfgedit.patch(self.cfg.source_path, "bot", "app_secret", secret)
-        cfgedit.patch(self.cfg.source_path, "panel", "password", password)
+        cfgedit.patch_many(self.cfg.source_path, "bot",
+                           {"app_id": app_id, "app_secret": secret})
+        cfgedit.patch_many(self.cfg.source_path, "panel", {"password": password})
 
         # 热生效：cfg 与 token 缓存都是同一批对象，改完不用重启
         self.cfg.app_id = app_id
@@ -434,7 +462,7 @@ class _Handler(BaseHTTPRequestHandler):
             if path == "/panel/api/overview":
                 self._json({"ok": True, "data": p.overview()})
             elif path == "/panel/api/groups":
-                self._json({"ok": True, "data": [dict(r) for r in p.store.list_groups()]})
+                self._json({"ok": True, "data": p.groups()})
             elif path.startswith("/panel/api/groups/") and path.endswith("/members"):
                 g = path.split("/")[4]
                 self._json({"ok": True, "data": [dict(r) for r in p.store.list_members(g, 200)]})

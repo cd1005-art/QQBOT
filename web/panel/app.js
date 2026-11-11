@@ -623,9 +623,10 @@ function exportAudit() {
 
 async function viewSettings() {
   $("#main").innerHTML = `<div class="topbar"><h1>设置</h1></div>${skeleton(4)}`;
-  const j = await api("/panel/api/settings");
+  const [j, gj] = await Promise.all([api("/panel/api/settings"), api("/panel/api/groups")]);
   if (!j.ok) { $("#main").innerHTML = empty("读取失败", j.error); return; }
   const d = j.data;
+  const groups = gj.ok ? gj.data : [];
   $("#main").innerHTML = `
     <div class="topbar"><h1>设置</h1><span class="sp"></span>
       <span class="badge ${d.dry_run ? "warn" : "ok"}">dry_run ${d.dry_run ? "开启" : "关闭"}</span></div>
@@ -646,9 +647,13 @@ async function viewSettings() {
         <button class="btn ${d.dry_run ? "pri" : "bad"}" onclick="toggleDry(${d.dry_run})">${d.dry_run ? "解除锁定" : "重新锁定"}</button>
       </div>
       <div style="border-top:1px solid var(--line);padding-top:14px">
-        <b>群白名单</b>
-        <div class="hint mt8" style="color:var(--muted);font-size:12px">
-          ${d.allowed_groups && d.allowed_groups.length ? d.allowed_groups.map(g => `<code class="mono">${esc(g)}</code>`).join("<br>") : "未设置（不限制），生产环境建议填写"}</div>
+        <div class="row" style="justify-content:space-between;margin-bottom:8px">
+          <b>群白名单</b>
+          <span class="hint" style="color:var(--muted);font-size:12px">
+            不勾选 = 不限制；勾选后只允许在这些群执行写操作</span>
+        </div>
+        <div class="row" id="wgList" style="gap:14px;margin-bottom:10px"></div>
+        <button class="btn pri" id="wgBtn" onclick="saveWhitelist()">保存白名单</button>
       </div>
     </div></div>
 
@@ -669,6 +674,7 @@ async function viewSettings() {
         <tr><td style="color:var(--muted)">@全体模板</td><td class="mono">${esc(d.at_all_template)}</td></tr>
       </tbody></table>
     </div></div>`;
+  renderWhitelist(groups, d.allowed_groups || []);
 }
 
 async function toggleDry(current) {
@@ -686,6 +692,31 @@ async function toggleReplyAt(current) {
   const j = await api("/panel/api/settings/reply-at", { method: "POST", body: JSON.stringify({ enable }) });
   if (j.ok) { toast(`回复${enable ? "已带上 @" : "已改为纯文本"}`, "ok"); viewChat(); }
   else toast(j.error || "操作失败", "bad");
+}
+
+function renderWhitelist(groups, picked) {
+  const el = $("#wgList");
+  if (!el) return;
+  if (!groups.length) { el.innerHTML = '<span class="hint" style="color:var(--muted);font-size:12px">库里还没有群，先让群里有人发言</span>'; return; }
+  el.innerHTML = groups.map(g => `
+    <label style="display:flex;gap:6px;align-items:center;font-size:12.5px" title="${esc(g.group_openid)}">
+      <input type="checkbox" class="wg" value="${esc(g.group_openid)}" style="width:auto"
+             ${picked.includes(g.group_openid) ? "checked" : ""}>
+      ${esc(g.title || g.group_openid.slice(0, 10) + "…")}</label>`).join("");
+}
+
+async function saveWhitelist() {
+  const btn = $("#wgBtn");
+  const groups = $$(".wg:checked").map(x => x.value);
+  if (btn) { btn.disabled = true; btn.textContent = "保存中…"; }
+  try {
+    const j = await api("/panel/api/settings/allowed-groups", { method: "POST",
+      body: JSON.stringify({ groups }) });
+    if (j.ok) toast(groups.length ? `白名单已保存（${groups.length} 个群）` : "已清空，当前不限制群", "ok");
+    else toast(j.error || "保存失败", "bad");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "保存白名单"; }
+  }
 }
 
 async function changePw() {
@@ -756,7 +787,7 @@ async function viewRules() {
         <label class="field" style="margin-bottom:8px"><span>判定提示词（留空用内置）</span>
           <textarea id="vPrompt" placeholder="留空使用内置提示词：只输出 JSON"></textarea></label>
         <div class="row">
-          <button class="btn pri" onclick="saveVision()">保存审核配置</button>
+          <button class="btn pri" id="vSaveBtn" onclick="saveVision()">保存审核配置</button>
           <span class="hint" id="vStat" style="color:var(--muted);font-size:12px"></span>
         </div>
       </div>
@@ -832,15 +863,24 @@ async function saveVisionLite() {
 }
 
 async function saveVision() {
+  const btn = $("#vSaveBtn");
+  const label = btn ? btn.textContent : "";
+  if (btn) { btn.disabled = true; btn.textContent = "保存中…"; }
   const cats = $$(".vcat:checked").map(x => x.value);
   const body = { enabled: $("#vOn").checked, chat_enabled: $("#vChatOn").checked,
     categories: cats,
     model: $("#vModel").value.trim(),
     action: $("#vAction").value, minutes: parseInt($("#vMinutes").value || "10", 10),
     notice: $("#vNotice").value.trim(), prompt: $("#vPrompt").value.trim() };
-  const j = await api("/panel/api/vision", { method: "POST", body: JSON.stringify(body) });
-  if (j.ok) { toast("图片审核配置已保存", "ok"); loadVision(); }
-  else toast(j.error || "保存失败", "bad");
+  try {
+    const j = await api("/panel/api/vision", { method: "POST", body: JSON.stringify(body) });
+    if (j.ok) { toast("图片审核配置已保存", "ok"); loadVision(); }
+    else toast(j.error || "保存失败", "bad");
+  } catch (e) {
+    toast("保存失败：" + e.message, "bad");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  }
 }
 
 async function loadVisionResults() {

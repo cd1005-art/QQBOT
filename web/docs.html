@@ -209,7 +209,7 @@ journalctl -u qqbot -f</pre>
   <h2 id="security">安全模型</h2>
   <ul>
     <li><b>dry_run 硬锁</b>：开启时任何写操作只预览不执行，面板和 CLI 都受约束</li>
-    <li><b>群白名单</b>：<code>allowed_groups</code> 非空时只允许操作这些群</li>
+    <li><b>群白名单</b>：<code>allowed_groups</code> 非空时只允许操作这些群；面板「设置 → 安全」勾选保存，不勾即不限制</li>
     <li><b>会话</b>：HMAC 签名的 Cookie，12 小时过期，密钥由 AppSecret 派生</li>
     <li><b>审计</b>：每次写操作记录时间、动作、群、对象、结果</li>
   </ul>

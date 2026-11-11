@@ -728,6 +728,16 @@ class _Handler(BaseHTTPRequestHandler):
             self._json({"ok": True})
             return
 
+        if path == "/panel/api/settings/allowed-groups":
+            body = self._body()
+            groups = [str(g).strip() for g in (body.get("groups") or []) if str(g).strip()]
+            cfgedit.patch_many(p.cfg.source_path, "safety", {"allowed_groups": groups})
+            p.cfg.allowed_groups = groups
+            p.store.log_action("whitelist", None, None,
+                               json.dumps({"groups": groups}, ensure_ascii=False), True, "saved")
+            self._json({"ok": True, "data": {"allowed_groups": groups}})
+            return
+
         if path == "/panel/api/settings/reply-at":
             body = self._body()
             enable = bool(body.get("enable"))

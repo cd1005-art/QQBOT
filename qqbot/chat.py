@@ -191,9 +191,19 @@ class ChatEngine:
 
         # 找图意图优先，直接发图，不走模型
         if self.cfg.image_search_enabled:
-            query = imagepick.detect(question, self.cfg.image_categories)
-            if query:
-                self._send_found_image(group, member, message_id, query)
+            info = imagepick.classify(question, self.cfg.image_categories)
+            if info and not info["allowed"]:
+                enabled = "、".join(self.cfg.image_categories) or "无"
+                try:
+                    self.api.send_message(
+                        group, f"「{info['key']}」这类图没开，当前能发：{enabled}。", msg_id=message_id)
+                except ApiError:
+                    pass
+                self.store.log_action("image", group, member, question[:60], False,
+                                      f"类别未放行: {info['key']}")
+                return
+            if info:
+                self._send_found_image(group, member, message_id, info["query"])
                 return
         # 日限额
         if self.store.chat_calls_today(group) >= self.cfg.llm_daily_limit:
@@ -203,7 +213,12 @@ class ChatEngine:
         client = LLMClient(self.cfg.llm_base_url, self.cfg.llm_api_key, self.cfg.llm_model,
                            max_tokens=self.cfg.llm_max_tokens,
                            temperature=self.cfg.llm_temperature)
-        messages = [{"role": "system", "content": self.cfg.llm_system}]
+        system = self.cfg.llm_system
+        if self.cfg.image_search_enabled:
+            cats = "、".join(self.cfg.image_categories) or "无"
+            system += (f"\n你可以发图片：当用户要图片时，系统会自动找图发送。"
+                       f"当前支持的图片类别：{cats}。用户要的类别不在其中时，如实说明支持范围，不要说自己发不了图片。")
+        messages = [{"role": "system", "content": system}]
         for row in self.store.chat_context(group, self.cfg.llm_context_turns):
             messages.append({"role": row["role"], "content": row["content"]})
         images = [a for a in (data.get("attachments") or [])

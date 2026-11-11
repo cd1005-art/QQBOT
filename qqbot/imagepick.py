@@ -20,6 +20,12 @@ UA = {
 CATEGORIES: dict[str, str] = {
     "二次元": "二次元 动漫 壁纸",
     "动漫": "动漫 壁纸",
+    "漫画": "漫画 插画",
+    "插画": "插画 唯美",
+    "壁纸": "高清 壁纸",
+    "头像": "动漫 头像",
+    "表情包": "表情包 搞笑",
+    "萌图": "萌系 插画",
     "搞笑": "搞笑 表情包",
     "沙雕": "沙雕 搞笑 图",
     "恐怖": "恐怖 氛围 图",
@@ -36,10 +42,11 @@ CATEGORIES: dict[str, str] = {
 VERBS = ("来张", "来一张", "找张", "找一张", "发张", "发一张", "整张", "给我一张", "来点", "找点")
 
 
-def detect(text: str, allowed: list[str] | None = None) -> str | None:
-    """识别「找图」意图，返回查询词；不是找图请求或类别未放行则返回 None。
+def classify(text: str, allowed: list[str] | None = None) -> dict | None:
+    """识别找图意图，返回 {key, query, allowed}；非找图请求返回 None。
 
-    allowed 为空表示不限制（不推荐），否则只认白名单里的类别。
+    与 detect 的区别：类别没放行时也返回结果（allowed=False），
+    让调用方能明确告诉用户「这类没开」，而不是把话丢给模型瞎编。
     """
     t = (text or "").strip()
     if not t or len(t) > 40:
@@ -47,12 +54,20 @@ def detect(text: str, allowed: list[str] | None = None) -> str | None:
     has_verb = any(v in t for v in VERBS) or ("图片" in t) or ("照片" in t)
     if not has_verb:
         return None
-    pool = CATEGORIES if not allowed else {k: v for k, v in CATEGORIES.items() if k in allowed}
-    # 长的类别名优先，避免「猫」抢在「猫咪」前面
-    for key in sorted(pool, key=len, reverse=True):
+    for key in sorted(CATEGORIES, key=len, reverse=True):
         if key in t:
-            return pool[key]
+            ok = not allowed or key in allowed
+            return {"key": key, "query": CATEGORIES[key], "allowed": ok}
     return None
+
+
+def detect(text: str, allowed: list[str] | None = None) -> str | None:
+    """识别「找图」意图，返回查询词；不是找图请求或类别未放行则返回 None。
+
+    allowed 为空表示不限制（不推荐），否则只认白名单里的类别。
+    """
+    info = classify(text, allowed)
+    return info["query"] if info and info["allowed"] else None
 
 
 def search(query: str, count: int = 8) -> list[dict]:

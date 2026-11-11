@@ -256,6 +256,11 @@ def check_image_intent():
     assert imagepick.detect("来张美女图片", safe) is None      # 未放行
     assert imagepick.detect("来张美女图片", []) == "美女 写真 唯美"  # 空=不限制
     assert imagepick.detect("来张猫咪图", ["猫", "宠物"]) == "猫咪 可爱"  # 长类别优先
+
+    # 类别未放行时，仍能识别出来，由上层决定怎么回答
+    info = imagepick.classify("来张好看的漫画", ["二次元"])
+    assert info and info["key"] == "漫画" and info["allowed"] is False, info
+    assert imagepick.classify("来张好看的漫画", ["漫画"])["allowed"] is True
     return "找图意图识别通过"
 
 

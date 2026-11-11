@@ -310,6 +310,7 @@ def check_c2c_queue():
                  llm_trigger="all")
     eng = ChatEngine(cfg, store=None, api=None)
     ev = {"id": "C2C1", "content": "在吗", "author": {"user_openid": "U1", "bot": False}}
+    assert eng.should_reply("C2C_MESSAGE_CREATE", ev, "c2c"), "私聊不需要 @ 也应回复"
     eng.submit("C2C_MESSAGE_CREATE", ev)
     assert eng.q.qsize() == 1, "私聊消息应入队"
     ev2 = {"id": "C2C2", "content": "在吗", "author": {"user_openid": "U1", "bot": True}}

@@ -63,7 +63,8 @@ class ChatEngine:
         if group:
             conv, scene = group, "group"
         elif event == "C2C_MESSAGE_CREATE":
-            conv = author.get("user_openid") or author.get("id") or ""
+            conv = (author.get("user_openid") or author.get("id")
+                    or data.get("openid") or data.get("user_openid") or "")
             scene = "c2c"
         else:
             return
@@ -74,6 +75,8 @@ class ChatEngine:
         # 没文字也没图就不处理；只有图时允许走识别
         if not content and not (images and self.cfg.vision_chat_enabled):
             return
+        if scene == "c2c":
+            print(f"[chat] 收到私聊 用户={conv[:8]}… 内容={(content or '(空)')[:20]}", flush=True)
         try:
             self.q.put_nowait((event, data, conv, scene))
         except queue.Full:
@@ -113,10 +116,13 @@ class ChatEngine:
                 return True
         return False
 
-    def should_reply(self, event: str, data: dict) -> bool:
+    def should_reply(self, event: str, data: dict, scene: str = "group") -> bool:
         content = AT_TAG.sub("", data.get("content") or "")
         content = LEADING_AT.sub("", content).strip()
         data["_clean"] = content
+        if scene == "c2c":
+            # 私聊是直接找上门，不需要 @ 或关键词
+            return bool(content)
         if not content and not (data.get("attachments") and self.cfg.vision_chat_enabled):
             return False
         if self._handled_by_reply_rule(data.get("group_openid") or "", content):
@@ -235,7 +241,7 @@ class ChatEngine:
                 print(f"[chat] 处理失败: {type(exc).__name__}: {exc}", flush=True)
 
     def _handle(self, event: str, data: dict, conv: str = "", scene: str = "group"):
-        if not self.should_reply(event, data):
+        if not self.should_reply(event, data, scene):
             return
         group = conv or data.get("group_openid") or ""
         message_id = data["id"]

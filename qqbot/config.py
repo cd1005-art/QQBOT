@@ -41,6 +41,19 @@ class Config:
     panel_host: str = "127.0.0.1"
     panel_port: int = 18901
     panel_password: str = ""
+    # 大模型对话
+    llm_enabled: bool = False
+    llm_base_url: str = "https://api.openai.com/v1"
+    llm_api_key: str = ""
+    llm_model: str = "gpt-4o-mini"
+    llm_system: str = "你是 QQ 群里的助手，回答简洁，控制在 80 字以内，不要使用 markdown。"
+    llm_max_tokens: int = 300
+    llm_temperature: float = 0.7
+    llm_context_turns: int = 6
+    llm_cooldown: int = 3
+    llm_daily_limit: int = 200
+    llm_trigger: str = "at"          # at | all
+    llm_keywords: list[str] = field(default_factory=list)
     ssh_host: str = ""
     ssh_port: int = 22
     ssh_user: str = "root"
@@ -66,6 +79,7 @@ def load(path: str | Path | None = None) -> Config:
     msg = raw.get("message", {})
     srv = raw.get("server", {})
     panel = raw.get("panel", {})
+    llm = raw.get("llm", {})
 
     app_id = os.getenv("QQBOT_APP_ID") or bot.get("app_id", "")
     app_secret = os.getenv("QQBOT_APP_SECRET") or bot.get("app_secret", "")
@@ -98,6 +112,18 @@ def load(path: str | Path | None = None) -> Config:
         panel_host=bind or str(panel.get("host", "127.0.0.1")),
         panel_port=int(panel.get("port", 18901)),
         panel_password=os.getenv("QQBOT_PANEL_PASSWORD") or str(panel.get("password", "")),
+        llm_enabled=bool(llm.get("enabled", False)),
+        llm_base_url=str(llm.get("base_url", "https://api.openai.com/v1")),
+        llm_api_key=os.getenv("QQBOT_LLM_KEY") or str(llm.get("api_key", "")),
+        llm_model=str(llm.get("model", "gpt-4o-mini")),
+        llm_system=str(llm.get("system", "你是 QQ 群里的助手，回答简洁，控制在 80 字以内，不要使用 markdown。")),
+        llm_max_tokens=int(llm.get("max_tokens", 300)),
+        llm_temperature=float(llm.get("temperature", 0.7)),
+        llm_context_turns=int(llm.get("context_turns", 6)),
+        llm_cooldown=int(llm.get("cooldown", 3)),
+        llm_daily_limit=int(llm.get("daily_limit", 200)),
+        llm_trigger=str(llm.get("trigger", "at")),
+        llm_keywords=[str(x) for x in llm.get("keywords", [])],
         ssh_host=os.getenv("QQBOT_SSH_HOST") or str(srv.get("host", "")),
         ssh_port=int(srv.get("port", 22)),
         ssh_user=os.getenv("QQBOT_SSH_USER") or str(srv.get("user", "root")),

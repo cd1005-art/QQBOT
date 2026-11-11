@@ -28,6 +28,26 @@ port = 18901
 # 面板登录密码，留空则拒绝登录
 password = ""
 
+[llm]
+# 大模型对话：任意 OpenAI 兼容接口（OpenAI / DeepSeek / Moonshot / 通义 / Ollama / one-api）
+enabled = false
+base_url = "https://api.openai.com/v1"
+api_key = ""
+model = "gpt-4o-mini"
+# 触发方式：at = 仅 @机器人；all = 所有消息（配合冷却，慎用）
+trigger = "at"
+# 额外触发词，命中即回，不需要 @
+keywords = []
+system = "你是 QQ 群里的助手，回答简洁，控制在 80 字以内，不要使用 markdown。"
+max_tokens = 300
+temperature = 0.7
+# 每群携带的上下文轮数
+context_turns = 6
+# 每群冷却秒数
+cooldown = 3
+# 每群每天最多回复次数
+daily_limit = 200
+
 [message]
 # 官方标签，纯文本 "@全体成员" 只会显示灰字、不触发提醒
 at_all_template = "<qqbot-at-everyone />"

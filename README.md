@@ -39,6 +39,7 @@ QQ 平台 --HTTPS POST--> https://你的域名/qqbot/webhook
 | 关键词自动处置（撤回 / 禁言 / 撤回+禁言） | 可用 |
 | 定时任务（cron，多群，执行历史） | 可用 |
 | 群级自动处置开关 | 可用 |
+| 大模型群聊对话（任意 OpenAI 兼容接口） | 可用，需自填 key |
 | 移出成员 / 群黑名单 / 成员列表接口 | **平台未开放（11253）** |
 
 ## 快速开始
@@ -165,6 +166,28 @@ groups     = []                  # 空 = 全部群
 ```
 
 调度线程每 20 秒扫一次到期任务；`dry_run = true` 时不发送，`last_result` 记为「dry_run 锁定，未发送」。执行结果同时写入审计。
+
+## 对话（大模型）
+
+可选能力，默认关闭。任意 OpenAI 兼容接口都能接：OpenAI、DeepSeek、Moonshot、通义、Ollama、one-api。
+
+```toml
+[llm]
+enabled = false
+base_url = "https://api.deepseek.com/v1"
+api_key = ""
+model = "deepseek-chat"
+trigger = "at"          # at = 仅 @机器人；all = 所有消息（慎用）
+keywords = []           # 命中即回，不需要 @
+context_turns = 6       # 每群携带的上下文轮数
+cooldown = 3            # 每群冷却秒数
+daily_limit = 200       # 每群每天最多回复次数
+```
+
+- 回复走**被动消息**（带原 `msg_id`），落在平台 5 分钟 / 5 次窗口内
+- 每群独立冷却与日限额，`chat_usage` 表按天累计调用数与 token
+- `chat_history` 保留最近对话，既做上下文也做留档，可在面板「对话」页查看
+- 面板内可直接改配置、点「发送测试」验证连通性，不用改文件重启
 
 ## 验签实现
 

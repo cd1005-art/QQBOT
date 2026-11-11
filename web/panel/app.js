@@ -115,6 +115,7 @@ const ROUTES = [
   { id: "groups", name: "群管理", ico: "◉" },
   { id: "rules", name: "规则", ico: "⚑" },
   { id: "schedules", name: "定时", ico: "◷" },
+  { id: "chat", name: "对话", ico: "✦" },
   { id: "events", name: "事件", ico: "≡" },
   { id: "audit", name: "审计", ico: "✓" },
   { id: "settings", name: "设置", ico: "⚙" },
@@ -130,7 +131,8 @@ async function route() {
   $$("#nav a").forEach(a => a.classList.toggle("on", a.getAttribute("href") === `#/${id}`));
   if (state.timer) { clearInterval(state.timer); state.timer = null; }
   const fn = { dashboard: viewDashboard, groups: viewGroups, rules: viewRules,
-    schedules: viewSchedules, events: viewEvents, audit: viewAudit, settings: viewSettings }[id];
+    schedules: viewSchedules, chat: viewChat, events: viewEvents, audit: viewAudit,
+    settings: viewSettings }[id];
   await (fn || viewDashboard)();
 }
 
@@ -388,6 +390,128 @@ async function toggleGroupRules(enabled) {
     body: JSON.stringify({ group: state.group, enabled }) });
   if (j.ok) toast(`本群自动处置已${enabled ? "开启" : "关闭"}`, "ok");
   else { toast(j.error || "操作失败", "bad"); $("#autoRules").checked = !enabled; }
+}
+
+/* ---------------- 对话 ---------------- */
+
+async function viewChat() {
+  $("#main").innerHTML = `<div class="topbar"><h1>对话</h1></div>${skeleton(4)}`;
+  const j = await api("/panel/api/llm");
+  if (!j.ok) { $("#main").innerHTML = empty("读取失败", j.error); return; }
+  const d = j.data;
+  const usage = d.usage || { calls: 0, tokens: 0 };
+  $("#main").innerHTML = `
+    <div class="topbar"><h1>对话</h1>
+      <span class="badge ${d.enabled ? "ok" : "warn"}">${d.enabled ? "已启用" : "未启用"}</span>
+      <span class="badge info">${esc(d.model || "-")}</span>
+      <span class="sp"></span>
+      <span class="meta">今日 ${usage.calls} 次 · ${usage.tokens} tokens</span>
+    </div>
+
+    <div class="panel"><div class="panel-h">模型接入<span class="sp"></span>
+      <span class="hint">OpenAI 兼容接口，填 base_url + api_key + model 即可</span></div>
+      <div class="panel-b">
+        <div class="row" style="align-items:flex-end;margin-bottom:12px">
+          <label class="field grow" style="margin:0"><span>base_url</span>
+            <input id="llmBase" value="${esc(d.base_url)}" placeholder="https://api.deepseek.com/v1"></label>
+          <label class="field grow" style="margin:0"><span>api_key（留空表示不修改）</span>
+            <input id="llmKey" type="password" placeholder="${esc(d.api_key || "sk-...")}"></label>
+          <label class="field" style="margin:0;width:200px"><span>model</span>
+            <input id="llmModel" value="${esc(d.model)}" placeholder="deepseek-chat"></label>
+        </div>
+        <div class="row" style="align-items:flex-end;margin-bottom:12px">
+          <label class="field" style="margin:0;width:150px"><span>触发方式</span>
+            <select id="llmTrigger">
+              <option value="at" ${d.trigger === "at" ? "selected" : ""}>仅 @ 机器人</option>
+              <option value="all" ${d.trigger === "all" ? "selected" : ""}>所有消息（慎用）</option>
+            </select></label>
+          <label class="field grow" style="margin:0"><span>额外触发词（逗号分隔，可空）</span>
+            <input id="llmKeys" value="${esc((d.keywords || []).join(","))}" placeholder="机器人,小助手"></label>
+          <label class="field" style="margin:0;width:110px"><span>冷却（秒）</span>
+            <input id="llmCool" value="${d.cooldown}"></label>
+          <label class="field" style="margin:0;width:120px"><span>每日上限</span>
+            <input id="llmDaily" value="${d.daily_limit}"></label>
+        </div>
+        <label class="field"><span>系统提示词</span>
+          <textarea id="llmSystem">${esc(d.system)}</textarea></label>
+        <div class="row" style="align-items:flex-end;margin-bottom:12px">
+          <label class="field" style="margin:0;width:120px"><span>max_tokens</span>
+            <input id="llmMax" value="${d.max_tokens}"></label>
+          <label class="field" style="margin:0;width:120px"><span>temperature</span>
+            <input id="llmTemp" value="${d.temperature}"></label>
+          <label class="field" style="margin:0;width:150px"><span>上下文轮数</span>
+            <input id="llmCtx" value="${d.context_turns}"></label>
+          <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-bottom:4px">
+            <input type="checkbox" id="llmOn" style="width:auto" ${d.enabled ? "checked" : ""}> 启用对话</label>
+          <span class="sp" style="flex:1"></span>
+          <button class="btn pri" onclick="saveLLM()">保存配置</button>
+        </div>
+        <div class="hint" style="color:var(--muted);font-size:12px">
+          回复走被动消息（带原 msg_id），平台限制：5 分钟内、每条消息最多回 5 次。超出窗口失败属正常。</div>
+      </div>
+    </div>
+
+    <div class="panel"><div class="panel-h">连通性测试</div><div class="panel-b">
+      <div class="row">
+        <input id="llmProbe" class="grow" value="用一句话介绍你自己">
+        <button class="btn" onclick="testLLM()">发送测试</button>
+      </div>
+      <div class="hint mt8" id="llmOut" style="color:var(--muted);font-size:12.5px"></div>
+    </div></div>
+
+    <div class="panel"><div class="panel-h">最近对话<span class="sp"></span>
+      <span class="hint">本地留档</span></div>
+      <div class="flush" id="chatBox">${skeleton(3)}</div></div>`;
+  loadChats();
+}
+
+async function saveLLM() {
+  const body = {
+    enabled: $("#llmOn").checked,
+    base_url: $("#llmBase").value.trim(),
+    api_key: $("#llmKey").value.trim(),
+    model: $("#llmModel").value.trim(),
+    trigger: $("#llmTrigger").value,
+    keywords: $("#llmKeys").value,
+    system: $("#llmSystem").value,
+    max_tokens: parseInt($("#llmMax").value || "300", 10),
+    temperature: parseFloat($("#llmTemp").value || "0.7"),
+    context_turns: parseInt($("#llmCtx").value || "6", 10),
+    cooldown: parseInt($("#llmCool").value || "3", 10),
+    daily_limit: parseInt($("#llmDaily").value || "200", 10),
+  };
+  const j = await api("/panel/api/llm", { method: "POST", body: JSON.stringify(body) });
+  if (j.ok) { toast("对话配置已保存", "ok"); viewChat(); }
+  else toast(j.error || "保存失败", "bad");
+}
+
+async function testLLM() {
+  const out = $("#llmOut");
+  out.innerHTML = "请求中…";
+  const j = await api("/panel/api/llm/test", { method: "POST",
+    body: JSON.stringify({ prompt: $("#llmProbe").value }) });
+  if (j.ok) {
+    out.innerHTML = `<div class="panel" style="margin:8px 0 0"><div class="panel-b">
+      <div style="white-space:pre-wrap">${esc(j.data.answer)}</div>
+      <div class="hint mt8" style="color:var(--muted);font-size:12px">
+        ${esc(j.data.model)} · ${j.data.tokens} tokens</div></div></div>`;
+  } else {
+    out.innerHTML = `<span class="badge bad">失败</span> ${esc(j.error)}`;
+  }
+}
+
+async function loadChats() {
+  const j = await api("/panel/api/chat?limit=40");
+  const rows = j.ok ? j.data : [];
+  if (!rows.length) { $("#chatBox").innerHTML = empty("还没有对话记录", "在群里 @机器人 说句话试试"); return; }
+  $("#chatBox").innerHTML = `<table><thead><tr><th style="width:96px">时间</th>
+    <th style="width:64px">角色</th><th>内容</th><th style="width:110px">成员</th></tr></thead><tbody>
+    ${rows.map(r => `<tr>
+      <td style="color:var(--muted)">${ts(r.created_at)}</td>
+      <td>${r.role === "user" ? '<span class="badge">群友</span>' : '<span class="badge ok">机器人</span>'}</td>
+      <td style="white-space:pre-wrap">${esc(r.content)}</td>
+      <td class="mono" style="color:var(--muted)">${esc((r.member_openid || "-").slice(0, 10))}…</td>
+    </tr>`).join("")}</tbody></table>`;
 }
 
 /* ---------------- 事件 ---------------- */

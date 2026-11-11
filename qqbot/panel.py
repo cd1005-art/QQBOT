@@ -27,6 +27,7 @@ from . import cfgedit
 from .api import CST, MAX_MUTE_MINUTES, ApiError, QQOpenAPI, rfc3339
 from .auth import AuthError, TokenManager
 from .config import Config
+from .llm import LLMClient, LLMError
 from .scheduler import CronError, next_after, parse as cron_parse
 from .store import Store
 
@@ -95,6 +96,74 @@ class Panel:
         out["top"] = [dict(r) for r in self.store.top_members(g, 5)]
         out["stats"] = self.store.stats()
         return out
+
+    # ---------------- 对话（LLM） ----------------
+
+    def llm_settings(self) -> dict:
+        c = self.cfg
+        masked = ("*" * 10 + c.llm_api_key[-4:]) if c.llm_api_key else ""
+        return {
+            "enabled": c.llm_enabled, "base_url": c.llm_base_url, "api_key": masked,
+            "model": c.llm_model, "system": c.llm_system,
+            "max_tokens": c.llm_max_tokens, "temperature": c.llm_temperature,
+            "context_turns": c.llm_context_turns, "cooldown": c.llm_cooldown,
+            "daily_limit": c.llm_daily_limit, "trigger": c.llm_trigger,
+            "keywords": c.llm_keywords, "usage": self.store.chat_usage_today(),
+        }
+
+    def save_llm(self, body: dict) -> dict:
+        path = self.cfg.source_path
+        c = self.cfg
+        if "base_url" in body:
+            c.llm_base_url = str(body["base_url"]).strip() or c.llm_base_url
+            cfgedit.patch(path, "llm", "base_url", c.llm_base_url)
+        key = (body.get("api_key") or "").strip()
+        if key and not key.startswith("****"):
+            c.llm_api_key = key
+            cfgedit.patch(path, "llm", "api_key", key)
+        if "model" in body:
+            c.llm_model = str(body["model"]).strip() or c.llm_model
+            cfgedit.patch(path, "llm", "model", c.llm_model)
+        if "system" in body:
+            c.llm_system = str(body["system"]).strip() or c.llm_system
+            cfgedit.patch(path, "llm", "system", c.llm_system)
+        if "trigger" in body:
+            trig = str(body["trigger"])
+            if trig not in ("at", "all"):
+                raise ValueError("trigger 只能是 at 或 all")
+            c.llm_trigger = trig
+            cfgedit.patch(path, "llm", "trigger", trig)
+        for field_name, attr, cast in (
+            ("max_tokens", "llm_max_tokens", int), ("temperature", "llm_temperature", float),
+            ("context_turns", "llm_context_turns", int), ("cooldown", "llm_cooldown", int),
+            ("daily_limit", "llm_daily_limit", int)):
+            if field_name in body:
+                val = cast(body[field_name])
+                setattr(c, attr, val)
+                cfgedit.patch(path, "llm", field_name, val)
+        if "keywords" in body:
+            kws = [k.strip() for k in str(body["keywords"]).replace("，", ",").split(",") if k.strip()]
+            c.llm_keywords = kws
+            cfgedit.patch(path, "llm", "keywords", kws)
+        if "enabled" in body:
+            c.llm_enabled = bool(body["enabled"])
+            cfgedit.patch(path, "llm", "enabled", c.llm_enabled)
+        self.store.log_action("llm-save", None, None,
+                              json.dumps({k: v for k, v in body.items() if k != "api_key"},
+                                         ensure_ascii=False), True, "saved")
+        return self.llm_settings()
+
+    def llm_test(self, prompt: str) -> dict:
+        if not self.cfg.llm_api_key:
+            raise ValueError("未配置 api_key")
+        client = LLMClient(self.cfg.llm_base_url, self.cfg.llm_api_key, self.cfg.llm_model,
+                           max_tokens=self.cfg.llm_max_tokens,
+                           temperature=self.cfg.llm_temperature, timeout=30)
+        answer, tokens = client.chat([
+            {"role": "system", "content": self.cfg.llm_system},
+            {"role": "user", "content": prompt},
+        ])
+        return {"answer": answer, "tokens": tokens, "model": self.cfg.llm_model}
 
     # ---------------- 首次配置 ----------------
 
@@ -384,6 +453,11 @@ class _Handler(BaseHTTPRequestHandler):
             elif path.startswith("/panel/api/groups/") and path.endswith("/stats"):
                 g = path.split("/")[4]
                 self._json({"ok": True, "data": p.group_detail(g)})
+            elif path == "/panel/api/llm":
+                self._json({"ok": True, "data": p.llm_settings()})
+            elif path == "/panel/api/chat":
+                self._json({"ok": True, "data": [dict(r) for r in
+                                                 p.store.recent_chats(int(qs.get("limit", ["40"])[0]))]})
             elif path == "/panel/api/rules":
                 self._json({"ok": True, "data": [dict(r) for r in p.store.list_rules()]})
             elif path == "/panel/api/disposals":
@@ -436,6 +510,24 @@ class _Handler(BaseHTTPRequestHandler):
 
         if not self._authed():
             self._json({"ok": False, "error": "unauthorized"}, 401)
+            return
+
+        if path == "/panel/api/llm":
+            try:
+                self._json({"ok": True, "data": p.save_llm(self._body())})
+            except (ValueError, TypeError) as exc:
+                self._json({"ok": False, "error": str(exc)}, 400)
+            return
+
+        if path == "/panel/api/llm/test":
+            body = self._body()
+            prompt = (body.get("prompt") or "你好，用一句话介绍你自己").strip()
+            try:
+                self._json({"ok": True, "data": p.llm_test(prompt)})
+            except LLMError as exc:
+                self._json({"ok": False, "error": str(exc)}, 400)
+            except ValueError as exc:
+                self._json({"ok": False, "error": str(exc)}, 400)
             return
 
         if path == "/panel/api/rules":

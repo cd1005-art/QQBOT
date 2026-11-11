@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from datetime import datetime  # noqa: E402
 
+from qqbot.chat import ChatEngine  # noqa: E402
 from qqbot.config import Config  # noqa: E402
 from qqbot.ingest import ingest  # noqa: E402
 from qqbot.rules import Engine  # noqa: E402
@@ -112,6 +113,40 @@ def check_schedules(store: Store):
     return "定时任务存取 / 到期判定 / 指标聚合 通过"
 
 
+def check_chat(store: Store):
+    cfg = Config(app_id="x", app_secret="y", dry_run=True,
+                 llm_enabled=True, llm_api_key="test-key", llm_trigger="at",
+                 llm_keywords=["小助手"])
+    eng = ChatEngine(cfg, store, api=None)
+
+    at_event = {"content": "<@!123456> 你好", "group_openid": "G1", "id": "M1"}
+    assert eng.should_reply("GROUP_AT_MESSAGE_CREATE", at_event), "@ 消息应触发"
+    assert at_event["_clean"] == "你好", f"@ 前缀未剥离: {at_event['_clean']}"
+
+    plain = {"content": "今天天气不错", "group_openid": "G1", "id": "M2"}
+    assert not eng.should_reply("GROUP_MESSAGE_CREATE", plain), "普通消息不应触发"
+
+    kw = {"content": "小助手出来", "group_openid": "G1", "id": "M3"}
+    assert eng.should_reply("GROUP_MESSAGE_CREATE", kw), "关键词应触发"
+
+    mention = {"content": "帮我看看", "group_openid": "G1", "id": "M4",
+               "mentions": [{"bot": True, "id": "1"}]}
+    assert eng.should_reply("GROUP_MESSAGE_CREATE", mention), "mentions 含 bot 应触发"
+
+    empty = {"content": "<@!123456>", "group_openid": "G1", "id": "M5"}
+    assert not eng.should_reply("GROUP_AT_MESSAGE_CREATE", empty), "空内容不应触发"
+
+    # 上下文读写
+    store.add_chat("G1", "M1", "user", "你好")
+    store.add_chat("G1", "M1", "assistant", "你好，有什么可以帮你")
+    ctx = store.chat_context("G1", 3)
+    assert [c["role"] for c in ctx] == ["user", "assistant"], ctx
+    assert store.chat_calls_today("G1") == 0
+    assert store.bump_chat_usage("G1", 120) == 1
+    assert store.chat_usage_today()["tokens"] == 120
+    return "对话触发判定 / 上下文 / 用量计数 通过"
+
+
 def main() -> int:
     msg1 = check_signature()
     msg_cron = check_cron()
@@ -121,12 +156,14 @@ def main() -> int:
         msg3 = check_recall(store)
         msg4 = check_rules(store)
         msg5 = check_schedules(store)
+        msg6 = check_chat(store)
     print(msg1)
     print(msg2)
     print(msg3)
     print(msg_cron)
     print(msg4)
     print(msg5)
+    print(msg6)
     print("smoke ok")
     return 0
 

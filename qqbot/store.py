@@ -96,6 +96,22 @@ CREATE TABLE IF NOT EXISTS metrics_hourly (
     members      INTEGER NOT NULL,
     PRIMARY KEY (bucket, group_openid)
 );
+CREATE TABLE IF NOT EXISTS chat_history (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_openid  TEXT NOT NULL,
+    member_openid TEXT,
+    role          TEXT NOT NULL,
+    content       TEXT NOT NULL,
+    created_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_chat_group ON chat_history(group_openid, id DESC);
+CREATE TABLE IF NOT EXISTS chat_usage (
+    day          TEXT NOT NULL,
+    group_openid TEXT NOT NULL,
+    calls        INTEGER NOT NULL DEFAULT 0,
+    tokens       INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, group_openid)
+);
 CREATE TABLE IF NOT EXISTS group_settings (
     group_openid TEXT PRIMARY KEY,
     auto_rules   INTEGER NOT NULL DEFAULT 1,
@@ -323,6 +339,52 @@ class Store:
                 "ON CONFLICT(group_openid) DO UPDATE SET auto_rules=excluded.auto_rules, "
                 "updated_at=excluded.updated_at",
                 (group_openid, int(enabled), int(time.time())))
+
+    # ---------------- 对话 ----------------
+
+    def add_chat(self, group_openid: str, member_openid: str | None, role: str, content: str):
+        with self._conn() as conn:
+            conn.execute(
+                "INSERT INTO chat_history(group_openid, member_openid, role, content, created_at) "
+                "VALUES(?,?,?,?,?)", (group_openid, member_openid, role, content, int(time.time())))
+
+    def chat_context(self, group_openid: str, turns: int = 6) -> list[sqlite3.Row]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT role, content FROM chat_history WHERE group_openid=? ORDER BY id DESC LIMIT ?",
+                (group_openid, turns * 2)).fetchall()
+        return list(reversed(rows))
+
+    def recent_chats(self, limit: int = 40) -> list[sqlite3.Row]:
+        with self._conn() as conn:
+            return conn.execute(
+                "SELECT * FROM chat_history ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+
+    def bump_chat_usage(self, group_openid: str, tokens: int = 0) -> int:
+        day = time.strftime("%Y-%m-%d")
+        with self._conn() as conn:
+            conn.execute(
+                "INSERT INTO chat_usage(day, group_openid, calls, tokens) VALUES(?,?,1,?) "
+                "ON CONFLICT(day, group_openid) DO UPDATE SET calls=calls+1, tokens=tokens+excluded.tokens",
+                (day, group_openid, tokens))
+            row = conn.execute("SELECT calls FROM chat_usage WHERE day=? AND group_openid=?",
+                               (day, group_openid)).fetchone()
+        return int(row["calls"]) if row else 0
+
+    def chat_calls_today(self, group_openid: str) -> int:
+        day = time.strftime("%Y-%m-%d")
+        with self._conn() as conn:
+            row = conn.execute("SELECT calls FROM chat_usage WHERE day=? AND group_openid=?",
+                               (day, group_openid)).fetchone()
+        return int(row["calls"]) if row else 0
+
+    def chat_usage_today(self) -> dict:
+        day = time.strftime("%Y-%m-%d")
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT COALESCE(SUM(calls),0) AS c, COALESCE(SUM(tokens),0) AS t "
+                "FROM chat_usage WHERE day=?", (day,)).fetchone()
+        return {"calls": int(row["c"]), "tokens": int(row["t"])}
 
     # ---------------- 统计聚合 ----------------
 

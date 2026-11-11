@@ -173,6 +173,7 @@ def serve(cfg: Config, store: Store, signer: "Signer | None"):
     from .auth import TokenManager
     from .panel import build_server as build_panel
 
+    from .chat import ChatEngine
     from .rules import Engine
     from .scheduler import Scheduler
 
@@ -180,6 +181,7 @@ def serve(cfg: Config, store: Store, signer: "Signer | None"):
     api = QQOpenAPI(cfg, tokens)
 
     engine = Engine(cfg, store, api)
+    chat = ChatEngine(cfg, store, api)
 
     def _on_message(event: str, data: dict):
         engine.submit(data.get("group_openid") or "",
@@ -187,6 +189,7 @@ def serve(cfg: Config, store: Store, signer: "Signer | None"):
                        or (data.get("author") or {}).get("id") or ""),
                       data.get("id") or "",
                       data.get("content") or "")
+        chat.submit(event, data)
 
     pipeline = _Pipeline(store, verbose=cfg.log_events,
                         on_message=_on_message if cfg.has_credentials() else None)
@@ -196,6 +199,9 @@ def serve(cfg: Config, store: Store, signer: "Signer | None"):
         engine.start()
         scheduler = Scheduler(cfg, store, api)
         scheduler.start()
+        chat.start()
+        if cfg.llm_enabled:
+            print(f"[chat] 对话已启用 model={cfg.llm_model} trigger={cfg.llm_trigger}", flush=True)
 
     panel_httpd = None
     if cfg.panel_enabled:
@@ -216,6 +222,7 @@ def serve(cfg: Config, store: Store, signer: "Signer | None"):
     try:
         httpd.serve_forever(poll_interval=0.5)
     finally:
+        chat.stop()
         if engine:
             engine.stop()
         if scheduler:

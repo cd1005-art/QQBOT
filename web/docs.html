@@ -61,6 +61,7 @@ th{color:var(--muted);font-weight:500}
   <a href="#panel">控制台</a>
   <a href="#rules">规则与自动处置</a>
   <a href="#schedules">定时任务</a>
+  <a href="#chat">对话（大模型）</a>
   <a href="#security">安全模型</a>
   <div class="t" style="margin-top:14px">参考</div>
   <a href="#limits">平台限制</a>
@@ -160,6 +161,18 @@ journalctl -u qqbot -f</pre>
 */30 * * * *    每 30 分钟
 0 9 * * 1-5     工作日 09:00</pre>
   <p>调度线程每 20 秒扫一次到期任务，结果写入 <code>last_result</code> 与审计。目标群不选时等于库内全部群。</p>
+
+  <h2 id="chat">对话（大模型）</h2>
+  <p>可选能力，默认关闭。任意 OpenAI 兼容接口都能接，填 <code>base_url</code>、<code>api_key</code>、<code>model</code> 三项即可。</p>
+  <table>
+    <tr><th>配置</th><th>说明</th></tr>
+    <tr><td><code>trigger</code></td><td><code>at</code> 仅 @机器人；<code>all</code> 所有消息（配合冷却，慎用）</td></tr>
+    <tr><td><code>keywords</code></td><td>命中即回，不需要 @</td></tr>
+    <tr><td><code>context_turns</code></td><td>每群携带最近几轮对话，控制 token</td></tr>
+    <tr><td><code>cooldown</code></td><td>每群冷却秒数</td></tr>
+    <tr><td><code>daily_limit</code></td><td>每群每天最多回复次数</td></tr>
+  </table>
+  <p>回复走被动消息（带原 <code>msg_id</code>），受平台 5 分钟 / 5 次窗口限制；超窗口会失败并记入审计，不会退化成主动消息刷屏。</p>
 
   <h2 id="security">安全模型</h2>
   <ul>

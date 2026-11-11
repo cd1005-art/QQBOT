@@ -17,7 +17,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .config import Config
-from .ingest import ingest
+from .ingest import MESSAGE_EVENTS, ingest
 from .sign import Signer
 from .store import Store
 
@@ -58,7 +58,7 @@ class _Pipeline:
                 continue
             if self.verbose and line:
                 print(line, flush=True)
-            if self.on_message and event in ("GROUP_MESSAGE_CREATE", "GROUP_AT_MESSAGE_CREATE"):
+            if self.on_message and event in MESSAGE_EVENTS:
                 try:
                     self.on_message(event, data)
                 except Exception as exc:
@@ -186,16 +186,14 @@ def serve(cfg: Config, store: Store, signer: "Signer | None"):
     vision = VisionEngine(cfg, store, api)
 
     def _on_message(event: str, data: dict):
-        engine.submit(data.get("group_openid") or "",
-                      ((data.get("author") or {}).get("member_openid")
-                       or (data.get("author") or {}).get("id") or ""),
-                      data.get("id") or "",
-                      data.get("content") or "")
+        group = data.get("group_openid") or ""
+        member = ((data.get("author") or {}).get("member_openid")
+                  or (data.get("author") or {}).get("id") or "")
+        # 规则、图片审核只针对群聊；对话引擎群聊私聊都处理
+        if group:
+            engine.submit(group, member, data.get("id") or "", data.get("content") or "")
+            vision.submit(group, member, data.get("id") or "", data.get("attachments") or [])
         chat.submit(event, data)
-        vision.submit(data.get("group_openid") or "",
-                      ((data.get("author") or {}).get("member_openid") or ""),
-                      data.get("id") or "",
-                      data.get("attachments") or [])
 
     pipeline = _Pipeline(store, verbose=cfg.log_events,
                         on_message=_on_message if cfg.has_credentials() else None)

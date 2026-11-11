@@ -146,6 +146,12 @@ def check_reply_rule(store: Store):
     eng._evaluate("G1", "M2", "MSG-AD", "这是广告")
     kinds = sorted(c[0] for c in api.calls)
     assert kinds == ["recall", "reply"], api.calls
+
+    # 规则回复也要进对话历史，带规则名
+    rows = store.recent_chats(6)
+    assert any(r["kind"] == "rule" for r in rows), [dict(r) for r in rows]
+    label = [r for r in rows if r["kind"] == "rule"][0]["model"]
+    assert label.startswith("规则："), label
     return "关键词回复 / 撤回+回复 / 重复去重 通过"
 
 

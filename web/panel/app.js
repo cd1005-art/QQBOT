@@ -605,7 +605,7 @@ async function loadChats() {
   const j = await api("/panel/api/chat?limit=40");
   const rows = j.ok ? j.data : [];
   if (!rows.length) { $("#chatBox").innerHTML = empty("还没有对话记录", "在群里 @机器人 说句话试试"); return; }
-  const KIND = { chat: "对话", imagegen: "生图", search: "找图" };
+  const KIND = { chat: "对话", imagegen: "生图", search: "找图", rule: "规则" };
   $("#chatBox").innerHTML = `<table><thead><tr><th style="width:92px">时间</th>
     <th style="width:58px">角色</th><th>内容</th><th style="width:190px">模型 / 来源</th>
     <th style="width:110px">群</th></tr></thead><tbody>

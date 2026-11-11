@@ -152,6 +152,7 @@ class Engine:
             except ApiError as exc:
                 ok_all = False
                 results.append(f"mute 失败: {exc.code} {exc.message}")
+        replied = False
         if action in ("reply", "recall_reply") and reply_text and message_id:
             sent = False
             if self.cfg.reply_at_user and member:
@@ -165,9 +166,18 @@ class Engine:
                 try:
                     st, _ = self.api.send_message(group, reply_text, msg_id=message_id)
                     results.append(f"reply HTTP {st}")
+                    replied = True
                 except ApiError as exc:
                     ok_all = False
                     results.append(f"reply 失败: {exc.code} {exc.message}")
+
+        if replied:
+            label = f"规则：{rule.get('name') or rule.get('id')}"
+            try:
+                self.store.add_chat(group, member, "user", content[:200], label, "rule")
+                self.store.add_chat(group, member, "assistant", reply_text, label, "rule")
+            except Exception as exc:  # 留档失败不能影响处置结果
+                print(f"[rules] 写对话历史失败: {exc}", flush=True)
 
         result = "; ".join(results) or "无动作"
         self.store.log_disposal(rule["id"], group, member, message_id, action, ok_all, result)

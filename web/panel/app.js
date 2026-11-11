@@ -612,10 +612,9 @@ function exportAudit() {
 
 async function viewSettings() {
   $("#main").innerHTML = `<div class="topbar"><h1>设置</h1></div>${skeleton(4)}`;
-  const [j, vj] = await Promise.all([api("/panel/api/settings"), api("/panel/api/vision")]);
+  const j = await api("/panel/api/settings");
   if (!j.ok) { $("#main").innerHTML = empty("读取失败", j.error); return; }
   const d = j.data;
-  const v = vj.ok ? vj.data : { enabled: false, model: "" };
   $("#main").innerHTML = `
     <div class="topbar"><h1>设置</h1><span class="sp"></span>
       <span class="badge ${d.dry_run ? "warn" : "ok"}">dry_run ${d.dry_run ? "开启" : "关闭"}</span></div>
@@ -652,26 +651,6 @@ async function viewSettings() {
       </div>
     </div></div>
 
-    <div class="panel"><div class="panel-h">AI 能力</div><div class="panel-b">
-      <div class="row" style="justify-content:space-between;align-items:flex-start">
-        <div><b>图片 AI 审核</b>
-          <div class="hint" style="color:var(--muted);font-size:12px">
-            群图片自动送视觉模型判断，命中违规按配置处置。详细参数在「规则 → 图片审核」。</div></div>
-        <div class="row" style="gap:8px">
-          <span class="badge ${v.enabled ? "ok" : "warn"}" id="vBadge">${v.enabled ? "已启用" : "未启用"}</span>
-          <button class="btn" id="vBtn" onclick="toggleVisionFromSettings(${v.enabled})">${v.enabled ? "关闭" : "开启"}</button>
-        </div>
-      </div>
-      <div class="row mt12" style="border-top:1px solid var(--line);padding-top:12px">
-        <span style="font-size:12.5px;color:var(--sub)">图片识别</span>
-        <span class="badge ${v.chat_enabled ? "ok" : ""}">${v.chat_enabled ? "已启用" : "未启用"}</span>
-        <span style="font-size:12.5px;color:var(--sub);margin-left:14px">模型</span>
-        <span class="mono" style="font-size:12.5px">${esc(v.model || "-")}</span>
-        <span class="sp" style="flex:1"></span>
-        <a href="#/rules" style="font-size:12.5px">调整参数 →</a>
-      </div>
-    </div></div>
-
     <div class="panel"><div class="panel-h">修改面板密码</div><div class="panel-b">
       <div class="row" style="align-items:flex-end">
         <label class="field grow" style="margin:0"><span>原密码</span><input id="pwOld" type="password"></label>
@@ -698,13 +677,6 @@ async function toggleDry(current) {
   if (!ok) return;
   const j = await api("/panel/api/settings/dry-run", { method: "POST", body: JSON.stringify({ enable }) });
   if (j.ok) { toast(`dry_run 已${enable ? "开启" : "关闭"}`, "ok"); viewSettings(); }
-  else toast(j.error || "操作失败", "bad");
-}
-
-async function toggleVisionFromSettings(current) {
-  const enable = !current;
-  const j = await api("/panel/api/vision", { method: "POST", body: JSON.stringify({ enabled: enable }) });
-  if (j.ok) { toast(`图片审核已${enable ? "开启" : "关闭"}`, "ok"); viewSettings(); }
   else toast(j.error || "操作失败", "bad");
 }
 

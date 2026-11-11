@@ -25,6 +25,13 @@ QQ 平台 --HTTPS POST--> https://你的域名/qqbot/webhook
   <img src="docs/shots/docs.png" width="49%" alt="文档页">
 </p>
 
+<p align="center">
+  <a href="https://qm.qq.com/cgi-bin/qm/qr?k=&jump_from=webapi&group_code=556269215">
+    <img src="https://img.shields.io/badge/QQ%E7%BE%A4-556269215-12B7F5?style=for-the-badge&logo=tencentqq&logoColor=white" alt="QQ群 556269215"></a>
+  <a href="https://github.com/cd1005-art/QQBOT/stargazers">
+    <img src="https://img.shields.io/github/stars/cd1005-art/QQBOT?style=for-the-badge&logo=github" alt="Stars"></a>
+</p>
+
 ## 能力
 
 | 能力 | 状态 |
@@ -390,3 +397,11 @@ github_token = ""         # 必填，否则无法校验
 ## 许可
 
 MIT
+
+## 交流群
+
+有问题、想提需求、想看后续更新，都可以进群：
+
+**QQ 群：556269215**
+
+[点此加群](https://qm.qq.com/cgi-bin/qm/qr?k=&jump_from=webapi&group_code=556269215)

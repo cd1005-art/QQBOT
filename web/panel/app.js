@@ -184,6 +184,20 @@ async function viewDashboard() {
     </div>`;
 }
 
+function who(nick, openid) {
+  const o = openid || "";
+  if (!o) return "—";
+  const name = (nick || "").trim() || "未知";
+  const short = o.length > 6 ? o.slice(-6) : o;
+  return `<span title="${esc(o)}" class="who" data-openid="${esc(o)}"
+    style="cursor:copy" onclick="copyText(this.dataset.openid)">${esc(name)}
+    <span style="color:var(--muted);font-size:11.5px">（${esc(short)}）</span></span>`;
+}
+
+function copyText(t) {
+  navigator.clipboard?.writeText(t).then(() => toast("已复制 openid", "ok")).catch(() => {});
+}
+
 function groupLabel(g) {
   const t = (g.title || "").trim();
   const short = g.group_openid ? g.group_openid.slice(0, 8) + "…" : "";
@@ -329,10 +343,11 @@ async function groupMembers(g) {
 }
 function membersTable(rows) {
   if (!rows.length) return empty("暂无成员记录", "等群成员发一条消息");
-  return `<table><thead><tr><th>member_openid</th><th>昵称</th><th style="width:60px">发言</th>
+  return `<table><thead><tr><th style="width:220px">成员</th><th>member_openid</th><th style="width:60px">发言</th>
     <th style="width:90px">最近</th><th style="width:150px">操作</th></tr></thead><tbody>
     ${rows.map(m => `<tr data-k="${esc((m.member_openid + " " + (m.nickname || "")).toLowerCase())}">
-      <td class="mono">${esc(m.member_openid)}</td><td>${esc(m.nickname || "-")}</td>
+      <td>${who(m.nickname, m.member_openid)}</td>
+      <td class="mono" style="font-size:11.5px;color:var(--muted)">${esc(m.member_openid)}</td>
       <td class="num">${m.msg_count}</td><td style="color:var(--muted)">${ago(m.last_seen)}</td>
       <td><button class="btn sm" onclick="askMute('${esc(m.member_openid)}')">禁言</button>
           <button class="btn sm" onclick="act('unmute',{member:'${esc(m.member_openid)}'})">解禁</button></td></tr>`).join("")}
@@ -364,13 +379,13 @@ async function groupMessages(g) {
 function messagesTable(rows) {
   if (!rows.length) return empty("暂无消息");
   const now = Date.now() / 1000;
-  return `<table><thead><tr><th style="width:90px">时间</th><th style="width:120px">成员</th><th>内容</th>
+  return `<table><thead><tr><th style="width:90px">时间</th><th style="width:160px">成员</th><th>内容</th>
     <th style="width:110px">可撤回</th><th style="width:80px">操作</th></tr></thead><tbody>
     ${rows.map(m => {
       const left = Math.floor(120 - (now - m.created_at));
       const able = !m.recalled && left > 0;
       return `<tr><td style="color:var(--muted)">${ts(m.created_at, false)}</td>
-        <td class="mono" style="color:var(--muted)">${esc((m.member_openid || "-").slice(0, 8))}…</td>
+        <td>${who(m.nickname, m.member_openid)}</td>
         <td>${esc(m.content || "")}${m.recalled ? ' <span class="badge">已撤回</span>' : ""}</td>
         <td>${m.recalled ? '<span class="badge">—</span>' : able ? `<span class="badge ok">${left}s</span>` : '<span class="badge warn">已超时</span>'}</td>
         <td>${able ? `<button class="btn sm" onclick="act('recall',{message_id:'${esc(m.message_id)}'})">撤回</button>` : ""}</td></tr>`;
@@ -394,7 +409,7 @@ function disposalTable(rows) {
     <th>成员</th><th style="width:100px">动作</th><th style="width:70px">结果</th><th>详情</th></tr></thead><tbody>
     ${rows.map(d => `<tr><td style="color:var(--muted)">${ts(d.created_at)}</td>
       <td class="num">#${d.rule_id ?? "-"}</td>
-      <td class="mono" style="color:var(--muted)">${esc((d.member_openid || "-").slice(0, 10))}…</td>
+      <td>${who(d.nickname, d.member_openid)}</td>
       <td>${esc(d.action)}</td>
       <td>${d.ok ? '<span class="badge ok">成功</span>' : '<span class="badge warn">未执行/失败</span>'}</td>
       <td style="color:var(--muted);font-size:12px">${esc(d.result || "")}</td></tr>`).join("")}
@@ -609,12 +624,13 @@ async function loadChats() {
   if (!rows.length) { $("#chatBox").innerHTML = empty("还没有对话记录", "在群里 @机器人 说句话试试"); return; }
   const KIND = { chat: "对话", imagegen: "生图", search: "找图", rule: "规则" };
   $("#chatBox").innerHTML = `<table><thead><tr><th style="width:92px">时间</th>
-    <th style="width:58px">角色</th><th>内容</th><th style="width:190px">模型 / 来源</th>
-    <th style="width:110px">群</th></tr></thead><tbody>
+    <th style="width:58px">角色</th><th>内容</th><th style="width:170px">成员</th>
+    <th style="width:190px">模型 / 来源</th><th style="width:110px">群</th></tr></thead><tbody>
     ${rows.map(r => `<tr>
       <td style="color:var(--muted)">${ts(r.created_at)}</td>
       <td>${r.role === "user" ? '<span class="badge">群友</span>' : '<span class="badge ok">机器人</span>'}</td>
       <td style="white-space:pre-wrap">${esc(r.content)}</td>
+      <td>${r.role === "user" ? who(r.member_nickname, r.member_openid) : "—"}</td>
       <td style="font-size:12px">
         ${r.model
           ? `<span class="badge ${r.kind === "chat" ? "info" : ""}" style="font-size:11px">${esc(KIND[r.kind] || "对话")}</span>

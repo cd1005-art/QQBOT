@@ -320,7 +320,10 @@ class Store:
     def recent_disposals(self, limit: int = 50) -> list[sqlite3.Row]:
         with self._conn() as conn:
             return conn.execute(
-                "SELECT * FROM disposals ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+                "SELECT d.*, mb.nickname FROM disposals d "
+                "LEFT JOIN members mb ON mb.group_openid = d.group_openid "
+                "AND mb.member_openid = d.member_openid "
+                "ORDER BY d.id DESC LIMIT ?", (limit,)).fetchall()
 
     # ---------------- 定时任务 ----------------
 
@@ -391,8 +394,11 @@ class Store:
     def recent_chats(self, limit: int = 40) -> list[sqlite3.Row]:
         with self._conn() as conn:
             return conn.execute(
-                "SELECT h.*, g.title AS group_title FROM chat_history h "
+                "SELECT h.*, g.title AS group_title, mb.nickname AS member_nickname "
+                "FROM chat_history h "
                 "LEFT JOIN groups g ON g.group_openid = h.group_openid "
+                "LEFT JOIN members mb ON mb.group_openid = h.group_openid "
+                "AND mb.member_openid = h.member_openid "
                 "ORDER BY h.id DESC LIMIT ?", (limit,)).fetchall()
 
     def bump_chat_usage(self, group_openid: str, tokens: int = 0) -> int:
@@ -495,13 +501,15 @@ class Store:
                 (group_openid, limit)).fetchall()
 
     def search_messages(self, group_openid: str, q: str = "", limit: int = 50) -> list[sqlite3.Row]:
-        sql = ("SELECT message_id, member_openid, content, created_at, recalled "
-               "FROM messages WHERE group_openid=?")
+        sql = ("SELECT m.message_id, m.member_openid, m.content, m.created_at, m.recalled, "
+               "mb.nickname FROM messages m "
+               "LEFT JOIN members mb ON mb.group_openid=m.group_openid "
+               "AND mb.member_openid=m.member_openid WHERE m.group_openid=?")
         args: list = [group_openid]
         if q:
-            sql += " AND content LIKE ?"
+            sql += " AND m.content LIKE ?"
             args.append(f"%{q}%")
-        sql += " ORDER BY created_at DESC LIMIT ?"
+        sql += " ORDER BY m.created_at DESC LIMIT ?"
         args.append(limit)
         with self._conn() as conn:
             return conn.execute(sql, tuple(args)).fetchall()
@@ -509,8 +517,11 @@ class Store:
     def messages(self, group_openid: str, limit: int = 50) -> list[sqlite3.Row]:
         with self._conn() as conn:
             return conn.execute(
-                "SELECT message_id, member_openid, content, created_at, recalled "
-                "FROM messages WHERE group_openid=? ORDER BY created_at DESC LIMIT ?",
+                "SELECT m.message_id, m.member_openid, m.content, m.created_at, m.recalled, "
+                "mb.nickname FROM messages m "
+                "LEFT JOIN members mb ON mb.group_openid=m.group_openid "
+                "AND mb.member_openid=m.member_openid "
+                "WHERE m.group_openid=? ORDER BY m.created_at DESC LIMIT ?",
                 (group_openid, limit)).fetchall()
 
     def event_stream(self, limit: int = 50, event_type: str | None = None) -> list[sqlite3.Row]:

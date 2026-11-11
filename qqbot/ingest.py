@@ -37,6 +37,11 @@ def event_key(event: str, data: dict, raw: str) -> str:
     return f"{event}:{digest}"
 
 
+def cfg_name(store: Store) -> str:
+    """机器人自称，用于把 <@bot> 显示成名字而不是尾号。"""
+    return store.get_kv("bot_name", "") or "机器人"
+
+
 def ingest(store: Store, event: str, data: dict, raw: str | None = None) -> str | None:
     """写库并返回可打印日志；未知事件也落 raw_events，返回 None 表示不处理。"""
     raw = raw or json.dumps(data, ensure_ascii=False)
@@ -58,8 +63,20 @@ def ingest(store: Store, event: str, data: dict, raw: str | None = None) -> str 
             store.touch_member(group_openid, member_openid,
                                author.get("union_openid"), author.get("username"))
         if data.get("id") and group_openid:
+            bots = {m.get("id"): (m.get("username") or "")
+                    for m in (data.get("mentions") or []) if m.get("bot") and m.get("id")}
+            if bots:
+                try:
+                    known = json.loads(store.get_kv("bot_names", "{}") or "{}")
+                except Exception:
+                    known = {}
+                for k, v in bots.items():
+                    known.setdefault(k, v or "机器人")
+                store.set_kv("bot_names", json.dumps(known, ensure_ascii=False))
             text = clean(data.get("content") or "",
-                         lambda oid: store.member_nickname(group_openid, oid))
+                         lambda oid: store.member_nickname(group_openid, oid),
+                         bot_ids=json.loads(store.get_kv("bot_names", "{}") or "{}"),
+                         bot_name=cfg_name(store))
             store.add_message(data["id"], group_openid, member_openid,
                               text, to_epoch(data.get("timestamp")))
         tag = "新" if first else "重复"

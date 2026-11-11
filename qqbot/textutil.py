@@ -12,13 +12,21 @@ MENTION = re.compile(r"<@!?([0-9A-Za-z_\-]{4,64})>")
 FACE = re.compile(r"<faceType=[^>]*>")
 
 
-def clean(text: str, resolve=None) -> str:
-    """resolve(openid) -> 昵称；拿不到就显示「成员」。"""
+def clean(text: str, resolve=None, bot_ids=None, bot_name: str = "机器人") -> str:
+    """resolve(openid) -> 昵称；bot_ids 命中时用其映射名，其余未知显示 openid 尾号。
+
+    bot_ids 支持 {openid: 名字} 或 [openid, ...]（后者统一用 bot_name）。
+    """
+    bots = dict(bot_ids or {})
+    if bot_ids and not isinstance(bot_ids, dict):
+        bots = {i: bot_name for i in bot_ids}
     if not text:
         return ""
 
     def _sub(m):
         oid = m.group(1)
+        if oid in bots:
+            return f"@{bots.get(oid) or bot_name}"
         name = ""
         if resolve:
             try:

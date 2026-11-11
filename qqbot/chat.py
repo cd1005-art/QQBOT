@@ -333,6 +333,9 @@ class ChatEngine:
             return
         if not answer:
             return
+        if self.cfg.reply_at_user and member:
+            # 我们会自己加 @，模型再写一遍就变成 @@，这里去掉开头的 @xxx
+            answer = re.sub(r"^\s*@[^\s，,：:]{1,20}[\s，,：:]*", "", answer).strip() or answer
         answer = answer[:MAX_REPLY_CHARS]
 
         st = None

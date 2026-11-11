@@ -41,6 +41,8 @@ class Config:
     panel_host: str = "127.0.0.1"
     panel_port: int = 18901
     panel_password: str = ""
+    # 机器人在 @ 文本里的显示名（群昵称），用于清洗历史消息
+    bot_name: str = "机器人"
     # 大模型对话
     llm_enabled: bool = False
     llm_base_url: str = "https://api.openai.com/v1"
@@ -150,6 +152,7 @@ def load(path: str | Path | None = None) -> Config:
         panel_host=bind or str(panel.get("host", "127.0.0.1")),
         panel_port=int(panel.get("port", 18901)),
         panel_password=os.getenv("QQBOT_PANEL_PASSWORD") or str(panel.get("password", "")),
+        bot_name=str((raw.get("bot", {}) or {}).get("name", "机器人")),
         llm_enabled=bool(llm.get("enabled", False)),
         llm_base_url=str(llm.get("base_url", "https://api.openai.com/v1")),
         llm_api_key=os.getenv("QQBOT_LLM_KEY") or str(llm.get("api_key", "")),

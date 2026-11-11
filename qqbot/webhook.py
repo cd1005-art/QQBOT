@@ -201,6 +201,11 @@ def serve(cfg: Config, store: Store, signer: "Signer | None"):
                         on_message=_on_message if cfg.has_credentials() else None)
     httpd = _Server((cfg.listen_host, cfg.listen_port), _Handler, cfg, signer, pipeline)
     scheduler = None
+    try:
+        store.set_kv("bot_name", cfg.bot_name or "机器人")
+    except Exception:
+        pass
+
     if cfg.has_credentials():
         engine.start()
         scheduler = Scheduler(cfg, store, api)

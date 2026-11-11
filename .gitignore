@@ -24,3 +24,6 @@ Thumbs.db
 
 # 智能体工作区数据
 .workbuddy/
+
+# 宣传片产出（不入库，体积大）
+promo/

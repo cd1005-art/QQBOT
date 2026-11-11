@@ -149,5 +149,13 @@ class QQOpenAPI:
             "file_type": 1, "file_name": file_name,
             "file_data": base64.b64encode(blob).decode(), "srv_send_msg": False})
 
+    def send_c2c(self, user_openid: str, content: str,
+                 msg_id: str | None = None, msg_seq: int = 1):
+        """私聊（C2C）文本回复，接口与群聊不同：/v2/users/{openid}/messages。"""
+        body: dict = {"content": content, "msg_type": 0, "msg_seq": msg_seq}
+        if msg_id:
+            body["msg_id"] = msg_id
+        return self.request("POST", f"/v2/users/{user_openid}/messages", body)
+
     def bot_self(self):
         return self.request("GET", "/users/@me")

@@ -55,12 +55,19 @@ class ChatEngine:
         if not self.cfg.llm_enabled or not self.cfg.llm_api_key:
             return
         group = data.get("group_openid") or ""
+        author = data.get("author") or {}
         message_id = data.get("id") or ""
         content = (data.get("content") or "").strip()
-        author = data.get("author") or {}
-        if not group or not message_id:
-            return
         if author.get("bot"):
+            return
+        if group:
+            conv, scene = group, "group"
+        elif event == "C2C_MESSAGE_CREATE":
+            conv = author.get("user_openid") or author.get("id") or ""
+            scene = "c2c"
+        else:
+            return
+        if not conv or not message_id:
             return
         images = [a for a in (data.get("attachments") or [])
                   if str(a.get("content_type", "")).startswith("image/") and a.get("url")]
@@ -68,7 +75,7 @@ class ChatEngine:
         if not content and not (images and self.cfg.vision_chat_enabled):
             return
         try:
-            self.q.put_nowait((event, data))
+            self.q.put_nowait((event, data, conv, scene))
         except queue.Full:
             pass
 
@@ -219,18 +226,18 @@ class ChatEngine:
     def _run(self):
         while not self._stop.is_set():
             try:
-                event, data = self.q.get(timeout=0.5)
+                event, data, conv, scene = self.q.get(timeout=0.5)
             except queue.Empty:
                 continue
             try:
-                self._handle(event, data)
+                self._handle(event, data, conv, scene)
             except Exception as exc:
                 print(f"[chat] 处理失败: {type(exc).__name__}: {exc}", flush=True)
 
-    def _handle(self, event: str, data: dict):
+    def _handle(self, event: str, data: dict, conv: str = "", scene: str = "group"):
         if not self.should_reply(event, data):
             return
-        group = data["group_openid"]
+        group = conv or data.get("group_openid") or ""
         message_id = data["id"]
         member = (data.get("author") or {}).get("member_openid") or ""
         question = data["_clean"]
@@ -247,16 +254,16 @@ class ChatEngine:
         if now - self._last_reply.get(group, 0) < self.cfg.llm_cooldown:
             return
 
-        # 1) 文生图：说了「画一张…」就走生成，不走对话模型
-        if self.cfg.imagegen_enabled:
+        # 1) 文生图：说了「画一张…」就走生成，不走对话模型（仅群聊）
+        if scene == "group" and self.cfg.imagegen_enabled:
             prompt = imagegen.detect(question)
             if prompt:
                 self._generate_image(group, member, message_id, prompt, question,
                                      imagegen.parse_size(question, cfg.imagegen_size))
                 return
 
-        # 2) 找图意图，直接发图，不走模型
-        if self.cfg.image_search_enabled:
+        # 2) 找图意图，直接发图，不走模型（仅群聊）
+        if scene == "group" and self.cfg.image_search_enabled:
             info = imagepick.classify(question, self.cfg.image_categories)
             if info and not info["allowed"]:
                 enabled = "、".join(self.cfg.image_categories) or "（未启用任何类别）"
@@ -330,13 +337,15 @@ class ChatEngine:
 
         st = None
         try:
-            if self.cfg.reply_at_user and member:
+            if scene == "c2c":
+                st, _ = self.api.send_c2c(group, answer, msg_id=message_id)
+            elif self.cfg.reply_at_user and member:
                 st, _ = self.api.send_message_at(group, answer, member, msg_id=message_id)
             else:
                 st, _ = self.api.send_message(group, answer, msg_id=message_id)
         except ApiError as exc:
             # markdown 失败时退回纯文本，至少把话说完
-            if self.cfg.reply_at_user and member:
+            if self.cfg.reply_at_user and member and scene == "group":
                 try:
                     st, _ = self.api.send_message(group, answer, msg_id=message_id)
                     print(f"[chat] @ 失败({exc.code})，已退回纯文本", flush=True)
@@ -354,8 +363,8 @@ class ChatEngine:
 
         self._last_reply[group] = time.time()
         calls = self.store.bump_chat_usage(group, tokens)
-        self.store.add_chat(group, member, "user", question, self.cfg.llm_model, "chat")
-        self.store.add_chat(group, member, "assistant", answer, self.cfg.llm_model, "chat")
+        self.store.add_chat(group, member, "user", question, self.cfg.llm_model, "chat", scene)
+        self.store.add_chat(group, member, "assistant", answer, self.cfg.llm_model, "chat", scene)
         self.store.log_action("chat", group, member, question[:120], True,
                               f"HTTP {st} tokens={tokens} today={calls}")
         print(f"[chat] 已回复 群={group[:8]}… tokens={tokens} 第 {calls} 次", flush=True)

@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS chat_history (
     content       TEXT NOT NULL,
     model         TEXT,
     kind          TEXT,
+    scene         TEXT,
     created_at    INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_chat_group ON chat_history(group_openid, id DESC);
@@ -147,6 +148,8 @@ class Store:
                 conn.execute("ALTER TABLE chat_history ADD COLUMN model TEXT")
             if "kind" not in ccols:
                 conn.execute("ALTER TABLE chat_history ADD COLUMN kind TEXT")
+            if "scene" not in ccols:
+                conn.execute("ALTER TABLE chat_history ADD COLUMN scene TEXT")
 
     @contextmanager
     def _conn(self):
@@ -241,6 +244,13 @@ class Store:
                 "SELECT member_openid, nickname, union_openid, first_seen, last_seen, msg_count "
                 "FROM members WHERE group_openid=? ORDER BY last_seen DESC LIMIT ?",
                 (group_openid, limit)).fetchall()
+
+    def member_nickname(self, group_openid: str, member_openid: str) -> str:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT nickname FROM members WHERE group_openid=? AND member_openid=?",
+                (group_openid, member_openid)).fetchone()
+        return (row["nickname"] if row and row["nickname"] else "")
 
     def last_message(self, group_openid: str, only_active: bool = True) -> sqlite3.Row | None:
         sql = "SELECT * FROM messages WHERE group_openid=?"
@@ -385,12 +395,12 @@ class Store:
     # ---------------- 对话 ----------------
 
     def add_chat(self, group_openid: str, member_openid: str | None, role: str, content: str,
-                 model: str | None = None, kind: str | None = None):
+                 model: str | None = None, kind: str | None = None, scene: str = "group"):
         with self._conn() as conn:
             conn.execute(
-                "INSERT INTO chat_history(group_openid, member_openid, role, content, model, kind, created_at) "
-                "VALUES(?,?,?,?,?,?,?)",
-                (group_openid, member_openid, role, content, model, kind, int(time.time())))
+                "INSERT INTO chat_history(group_openid, member_openid, role, content, model, kind, "
+                "scene, created_at) VALUES(?,?,?,?,?,?,?,?)",
+                (group_openid, member_openid, role, content, model, kind, scene, int(time.time())))
 
     def chat_context(self, group_openid: str, turns: int = 6) -> list[sqlite3.Row]:
         with self._conn() as conn:

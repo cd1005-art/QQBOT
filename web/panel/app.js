@@ -632,8 +632,8 @@ async function loadChats() {
     ${rows.map(r => `<tr>
       <td style="color:var(--muted)">${ts(r.created_at)}</td>
       <td>${r.role === "user"
-        ? `<span class="badge">群友</span><div style="margin-top:5px">${who(r.member_nickname, r.member_openid)}</div>`
-        : '<span class="badge ok">机器人</span>'}</td>
+        ? `<span class="badge">${r.scene === "c2c" ? "私聊" : "群友"}</span><div style="margin-top:5px">${who(r.member_nickname, r.member_openid)}</div>`
+        : `<span class="badge ok">机器人</span>${r.scene === "c2c" ? '<div style="margin-top:5px;color:var(--muted);font-size:11.5px">私聊</div>' : ""}`}</td>
       <td style="white-space:pre-wrap">${esc(r.content)}</td>
       <td style="font-size:12px">
         ${r.model

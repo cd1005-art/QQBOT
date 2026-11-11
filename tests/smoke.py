@@ -305,6 +305,19 @@ def check_imagegen_intent():
     return "文生图意图识别通过"
 
 
+def check_c2c_queue():
+    cfg = Config(app_id="x", app_secret="y", llm_enabled=True, llm_api_key="k",
+                 llm_trigger="all")
+    eng = ChatEngine(cfg, store=None, api=None)
+    ev = {"id": "C2C1", "content": "在吗", "author": {"user_openid": "U1", "bot": False}}
+    eng.submit("C2C_MESSAGE_CREATE", ev)
+    assert eng.q.qsize() == 1, "私聊消息应入队"
+    ev2 = {"id": "C2C2", "content": "在吗", "author": {"user_openid": "U1", "bot": True}}
+    eng.submit("C2C_MESSAGE_CREATE", ev2)
+    assert eng.q.qsize() == 1, "机器人自己的消息不应入队"
+    return "私聊消息入队 / 机器人自身过滤 通过"
+
+
 def check_send_at():
     from qqbot.api import QQOpenAPI
     from qqbot.auth import TokenManager
@@ -346,6 +359,7 @@ def main() -> int:
     print(msg6)
     print(msg7)
     print(check_send_at())
+    print(check_c2c_queue())
     print(check_verdict())
     print(check_image_block())
     print(check_image_intent())

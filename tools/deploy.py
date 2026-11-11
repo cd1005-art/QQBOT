@@ -79,11 +79,11 @@ def main() -> int:
         remote_has_cfg = keep_out.read().decode().strip() == "yes"
         if remote_has_cfg:
             print("  保留远端 config.toml（不覆盖）")
-        run(client, f"mkdir -p {REMOTE}/qqbot {REMOTE}/web/panel {REMOTE}/tests {REMOTE}/deploy {REMOTE}/data")
+        run(client, f"mkdir -p {REMOTE}/qqbot {REMOTE}/web/panel {REMOTE}/tests {REMOTE}/deploy {REMOTE}/data {REMOTE}/tools")
         run(client, "mkdir -p /www/wwwroot/qqbot.oddpp.com/panel")
         sftp = client.open_sftp()
         files = list(FILES)
-        for py in sorted((ROOT / "qqbot").glob("*.py")):
+        for py in sorted(list((ROOT / "qqbot").glob("*.py")) + list((ROOT / "tools").glob("*.py"))):
             rel = py.relative_to(ROOT).as_posix()
             if rel not in files:
                 files.append(rel)

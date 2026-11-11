@@ -7,6 +7,7 @@ import json
 from datetime import datetime
 
 from .store import Store
+from .textutil import clean
 
 # 群消息（含全量模式与 @ 模式，字段结构一致）
 MESSAGE_EVENTS = {"GROUP_AT_MESSAGE_CREATE", "GROUP_MESSAGE_CREATE", "C2C_MESSAGE_CREATE"}
@@ -57,8 +58,10 @@ def ingest(store: Store, event: str, data: dict, raw: str | None = None) -> str 
             store.touch_member(group_openid, member_openid,
                                author.get("union_openid"), author.get("username"))
         if data.get("id") and group_openid:
+            text = clean(data.get("content") or "",
+                         lambda oid: store.member_nickname(group_openid, oid))
             store.add_message(data["id"], group_openid, member_openid,
-                              data.get("content"), to_epoch(data.get("timestamp")))
+                              text, to_epoch(data.get("timestamp")))
         tag = "新" if first else "重复"
         return (f"[{tag}消息] {event} 群={group_openid} 成员={member_openid} "
                 f"内容={(data.get('content') or '')[:60]}")

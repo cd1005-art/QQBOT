@@ -319,6 +319,25 @@ tools/deploy.py 一键部署（可选，含 SSH 上传）
 PLAN.md         版本路线（P0 / P1 / P2）
 ```
 
+## Star 提示
+
+两套机制共存，默认走软提示：
+
+| 机制 | 行为 | 配置 |
+|---|---|---|
+| 软提示 | 登录后弹窗，点「以后再说」按间隔再弹 | `soft_prompt` / `soft_interval_hours` |
+| 硬门槛 | 未点 Star 直接阻断面板 | `require_star` / `star_user` / `github_token` |
+
+```toml
+[about]
+repo = "cd1005-art/QQBOT"
+soft_prompt = true          # 软提示总开关
+soft_interval_hours = 24    # 间隔小时；0 = 只弹一次
+require_star = false        # 硬门槛，开启后不再弹软提示
+```
+
+设置页「开源项目」卡片能看到两者的当前状态，并直接跳转仓库。
+
 ## Star 门槛（可选，默认关闭）
 
 ```toml

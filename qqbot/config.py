@@ -73,6 +73,8 @@ class Config:
     require_star: bool = False
     star_user: str = ""
     github_token: str = ""
+    soft_prompt: bool = True
+    soft_interval_hours: int = 24
     # 网络找图
     image_search_enabled: bool = False
     image_max_bytes: int = 5 * 1024 * 1024
@@ -168,6 +170,8 @@ def load(path: str | Path | None = None) -> Config:
         require_star=bool(about.get("require_star", False)),
         star_user=str(about.get("star_user", "")).strip(),
         github_token=str(about.get("github_token", "")).strip(),
+        soft_prompt=bool(about.get("soft_prompt", True)),
+        soft_interval_hours=int(about.get("soft_interval_hours", 24)),
         image_search_enabled=bool(image.get("search_enabled", False)),
         image_max_bytes=int(image.get("max_bytes", 5 * 1024 * 1024)),
         image_categories=[str(x) for x in image.get("categories", ['二次元', '动漫', '漫画', '插画', '壁纸', '搞笑', '风景', '宠物', '游戏', '表情包'])],

@@ -410,6 +410,23 @@ class Panel:
                 return False, None
         return False, "Star 数超过 1000，未在前 10 页找到该用户"
 
+    def star_prompt(self) -> dict:
+        """软提示：与硬门槛互斥——require_star 开着时不再弹。"""
+        c = self.cfg
+        last = int(self.store.get_kv("star_prompt_at", "0") or 0)
+        interval = max(0, c.soft_interval_hours) * 3600
+        now = int(time.time())
+        if not c.soft_prompt or c.require_star:
+            show = False
+        elif last == 0:
+            show = True
+        elif interval == 0:
+            show = False          # 0 = 只弹一次，点过就不再弹
+        else:
+            show = now - last >= interval
+        return {"show": show, "repo": c.repo, "interval_hours": c.soft_interval_hours,
+                "last_at": last, "next_at": (last + interval) if last and interval else 0}
+
     def settings(self) -> dict:
         return {
             "app_id": self.cfg.app_id,
@@ -422,6 +439,8 @@ class Panel:
             "repo": self.cfg.repo,
             "require_star": self.cfg.require_star,
             "star_user": self.cfg.star_user,
+            "soft_prompt": self.cfg.soft_prompt,
+            "soft_interval_hours": self.cfg.soft_interval_hours,
             "listen": f"{self.cfg.listen_host}:{self.cfg.listen_port}{self.cfg.webhook_path}",
             "panel": f"{self.cfg.panel_host}:{self.cfg.panel_port}",
             "db": str(self.cfg.db_path),
@@ -598,6 +617,9 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/panel/api/star":
             self._json({"ok": True, "data": self.panel.star_status()})
             return
+        if path == "/panel/api/prompt/star":
+            self._json({"ok": True, "data": self.panel.star_prompt()})
+            return
         if path == "/panel/api/setup/status":
             self._json({"ok": True, "data": self.panel.setup_status()})
             return
@@ -670,6 +692,11 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
         p = self.panel
+
+        if path == "/panel/api/prompt/star/dismiss":
+            p.store.set_kv("star_prompt_at", str(int(time.time())))
+            self._json({"ok": True, "data": p.star_prompt()})
+            return
 
         if path == "/panel/api/star/check":
             self._json({"ok": True, "data": p.star_status(force=True)})

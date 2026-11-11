@@ -86,6 +86,10 @@ categories = ["二次元", "动漫", "漫画", "插画", "壁纸", "搞笑", "�
 # 且 GitHub 的 stargazers 接口现已要求鉴权，不配 token 会 fail-open。
 repo = "cd1005-art/QQBOT"
 require_star = false
+# 软提示：登录后弹一次「点个 Star」，和硬门槛互斥
+soft_prompt = true
+# 间隔小时；0 表示只弹一次，点过不再弹
+soft_interval_hours = 24
 # 要校验的 GitHub 用户名（部署者自己的账号；注意不能给自己仓库点 Star）
 star_user = ""
 # 可选：GitHub Token（只需 public_repo 读权限），不配则无法校验

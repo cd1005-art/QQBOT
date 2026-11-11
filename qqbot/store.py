@@ -113,6 +113,11 @@ CREATE TABLE IF NOT EXISTS chat_usage (
     tokens       INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (day, group_openid)
 );
+CREATE TABLE IF NOT EXISTS kv (
+    key   TEXT PRIMARY KEY,
+    value TEXT,
+    updated_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS group_settings (
     group_openid TEXT PRIMARY KEY,
     auto_rules   INTEGER NOT NULL DEFAULT 1,
@@ -404,6 +409,20 @@ class Store:
                 "SELECT COALESCE(SUM(calls),0) AS c, COALESCE(SUM(tokens),0) AS t "
                 "FROM chat_usage WHERE day=?", (day,)).fetchone()
         return {"calls": int(row["c"]), "tokens": int(row["t"])}
+
+    # ---------------- KV ----------------
+
+    def get_kv(self, key: str, default: str = "") -> str:
+        with self._conn() as conn:
+            row = conn.execute("SELECT value FROM kv WHERE key=?", (key,)).fetchone()
+        return row["value"] if row else default
+
+    def set_kv(self, key: str, value: str):
+        with self._conn() as conn:
+            conn.execute(
+                "INSERT INTO kv(key, value, updated_at) VALUES(?,?,?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+                (key, value, int(time.time())))
 
     # ---------------- 统计聚合 ----------------
 

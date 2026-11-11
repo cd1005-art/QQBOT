@@ -657,6 +657,24 @@ async function viewSettings() {
       </div>
     </div></div>
 
+    <div class="panel"><div class="panel-h">开源项目<span class="sp"></span>
+      <span class="hint">软提示与 Star 门槛互斥，门槛开时不再弹</span></div><div class="panel-b">
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
+        <div>
+          <b style="font-size:13px">${esc(d.repo || "-")}</b>
+          <div class="hint" style="color:var(--muted);font-size:12px">
+            弹窗提示：${d.soft_prompt ? "开启" : "关闭"}
+            · 间隔：${d.soft_interval_hours ? d.soft_interval_hours + " 小时" : "仅一次"}
+            · 硬门槛：${d.require_star ? "开启（校验 " + esc(d.star_user || "未配置") + "）" : "关闭"}</div>
+        </div>
+        <a class="btn" style="text-decoration:none" target="_blank" rel="noopener"
+           href="https://github.com/${esc(d.repo || "cd1005-art/QQBOT")}">打开仓库</a>
+      </div>
+      <div class="hint mt12" style="color:var(--muted);font-size:12px;border-top:1px solid var(--line);padding-top:10px">
+        改配置：<code class="mono">[about] soft_prompt / soft_interval_hours / require_star</code>，
+        改完重启服务生效。</div>
+    </div></div>
+
     <div class="panel"><div class="panel-h">修改面板密码</div><div class="panel-b">
       <div class="row" style="align-items:flex-end">
         <label class="field grow" style="margin:0"><span>原密码</span><input id="pwOld" type="password"></label>
@@ -1059,6 +1077,31 @@ async function doLogin() {
   else { $("#loginHint").textContent = j.error || "登录失败"; }
 }
 
+async function softStarPrompt() {
+  const j = await api("/panel/api/prompt/star").catch(() => ({ ok: false }));
+  if (!j.ok || !j.data || !j.data.show) return;
+  const d = j.data;
+  const repo = d.repo || "cd1005-art/QQBOT";
+  const mask = document.createElement("div");
+  mask.className = "mask";
+  mask.innerHTML = `<div class="modal">
+    <h3>这个小工具如果对你有用</h3>
+    <p>去 GitHub 点个 Star 就是最好的支持。提示间隔 ${d.interval_hours ? d.interval_hours + " 小时" : "仅此一次"}，
+    点「以后再说」不会影响任何功能。</p>
+    <div class="row" style="justify-content:flex-end">
+      <button class="btn ghost" data-x="0">以后再说</button>
+      <a class="btn pri" style="text-decoration:none" target="_blank" rel="noopener"
+         href="https://github.com/${esc(repo)}" data-x="1">去点 Star</a>
+    </div></div>`;
+  mask.addEventListener("click", async e => {
+    const b = e.target.closest("[data-x]");
+    if (!b) return;
+    document.body.removeChild(mask);
+    await api("/panel/api/prompt/star/dismiss", { method: "POST" }).catch(() => {});
+  });
+  document.body.appendChild(mask);
+}
+
 async function starGate() {
   const j = await api("/panel/api/star").catch(() => ({ ok: false }));
   if (!j.ok || !j.data || !j.data.required) return true;
@@ -1094,6 +1137,7 @@ async function boot() {
   const me = await api("/panel/api/me").catch(() => ({ ok: false }));
   if (!me.ok) return showLogin();
   state.me = me.data;
+  softStarPrompt();
   $("#login").classList.add("hide");
   $("#app").classList.remove("hide");
   $("#nav").innerHTML = navHtml((location.hash.replace(/^#\/?/, "") || "dashboard").split("/")[0]);

@@ -410,6 +410,11 @@ class Panel:
                 return False, None
         return False, "Star 数超过 1000，未在前 10 页找到该用户"
 
+    def is_author(self) -> bool:
+        """仓库所有者本人使用本实例：GitHub 不允许自赞，用账号是否等于仓库 owner 判断。"""
+        owner = (self.cfg.repo or "").split("/")[0].strip().lower()
+        return bool(owner) and owner == (self.cfg.star_user or "").strip().lower()
+
     def star_checked(self):
         """仅用于界面展示：True=已点星，False=未点，None=未配置或无法校验。"""
         c = self.cfg
@@ -427,8 +432,8 @@ class Panel:
         last = int(self.store.get_kv("star_prompt_at", "0") or 0)
         interval = max(0, c.soft_interval_hours) * 3600
         now = int(time.time())
-        if not c.soft_prompt or c.require_star or self.star_checked() is True:
-            show = False   # 已点星就不再打扰
+        if not c.soft_prompt or c.require_star or self.is_author() or self.star_checked() is True:
+            show = False   # 作者本人或已点星，都不打扰
         elif last == 0:
             show = True
         elif interval == 0:
@@ -453,6 +458,7 @@ class Panel:
             "soft_prompt": self.cfg.soft_prompt,
             "soft_interval_hours": self.cfg.soft_interval_hours,
             "starred": self.star_checked(),
+            "is_author": self.is_author(),
             "listen": f"{self.cfg.listen_host}:{self.cfg.listen_port}{self.cfg.webhook_path}",
             "panel": f"{self.cfg.panel_host}:{self.cfg.panel_port}",
             "db": str(self.cfg.db_path),

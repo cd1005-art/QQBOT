@@ -193,6 +193,27 @@ def check_chat(store: Store):
     return "对话触发判定 / 上下文 / 用量计数 通过"
 
 
+def check_send_at():
+    from qqbot.api import QQOpenAPI
+    from qqbot.auth import TokenManager
+
+    cfg = Config(app_id="x", app_secret="y")
+    api = QQOpenAPI(cfg, TokenManager("x", "y"))
+    captured = {}
+
+    def fake_request(method, path, body=None, **kw):
+        captured.update({"m": method, "p": path, "b": body})
+        return 200, {}
+
+    api.request = fake_request  # type: ignore
+    api.send_message_at("G1", "你好", "M1", msg_id="MSG1")
+    b = captured["b"]
+    assert b["msg_type"] == 2, b
+    assert '<qqbot-at-user id="M1" /> 你好' in b["markdown"]["content"], b
+    assert b["msg_id"] == "MSG1"
+    return "@ 回复使用 markdown + qqbot-at-user 通过"
+
+
 def main() -> int:
     msg1 = check_signature()
     msg_cron = check_cron()
@@ -212,6 +233,7 @@ def main() -> int:
     print(msg5)
     print(msg6)
     print(msg7)
+    print(check_send_at())
     print("smoke ok")
     return 0
 

@@ -153,13 +153,21 @@ class Engine:
                 ok_all = False
                 results.append(f"mute 失败: {exc.code} {exc.message}")
         if action in ("reply", "recall_reply") and reply_text and message_id:
-            try:
-                # 被动回复：带原 msg_id，受 5 分钟 / 5 次窗口限制
-                st, _ = self.api.send_message(group, reply_text, msg_id=message_id)
-                results.append(f"reply HTTP {st}")
-            except ApiError as exc:
-                ok_all = False
-                results.append(f"reply 失败: {exc.code} {exc.message}")
+            sent = False
+            if self.cfg.reply_at_user and member:
+                try:
+                    st, _ = self.api.send_message_at(group, reply_text, member, msg_id=message_id)
+                    results.append(f"reply HTTP {st}（@ 提问者）")
+                    sent = True
+                except ApiError as exc:
+                    results.append(f"at 失败 {exc.code}，改用纯文本")
+            if not sent:
+                try:
+                    st, _ = self.api.send_message(group, reply_text, msg_id=message_id)
+                    results.append(f"reply HTTP {st}")
+                except ApiError as exc:
+                    ok_all = False
+                    results.append(f"reply 失败: {exc.code} {exc.message}")
 
         result = "; ".join(results) or "无动作"
         self.store.log_disposal(rule["id"], group, member, message_id, action, ok_all, result)

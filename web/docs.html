@@ -62,6 +62,7 @@ th{color:var(--muted);font-weight:500}
   <a href="#rules">规则与自动处置</a>
   <a href="#schedules">定时任务</a>
   <a href="#chat">对话（大模型）</a>
+  <a href="#at">回复 @ 提问者</a>
   <a href="#security">安全模型</a>
   <div class="t" style="margin-top:14px">参考</div>
   <a href="#limits">平台限制</a>
@@ -174,6 +175,11 @@ journalctl -u qqbot -f</pre>
     <tr><td><code>daily_limit</code></td><td>每群每天最多回复次数</td></tr>
   </table>
   <p>回复走被动消息（带原 <code>msg_id</code>），受平台 5 分钟 / 5 次窗口限制；超窗口会失败并记入审计，不会退化成主动消息刷屏。</p>
+
+  <h2 id="at">回复时 @ 提问者</h2>
+  <p>群聊里 @ 某人只支持 markdown 消息。开启 <code>[reply] at_user</code> 后，回复会以 markdown 发送，
+  内容前缀 <code>&lt;qqbot-at-user id="member_openid" /&gt;</code>；markdown 失败会自动退回纯文本。</p>
+  <p>对规则回复（<code>reply</code> / <code>recall_reply</code>）与模型对话同时生效，面板「设置 → 回复行为」可切换。</p>
 
   <h2 id="security">安全模型</h2>
   <ul>

@@ -119,5 +119,14 @@ class QQOpenAPI:
             body["msg_id"] = msg_id
         return self.request("POST", f"/v2/groups/{group_openid}/messages", body)
 
+    def send_message_at(self, group_openid: str, content: str, member_openid: str,
+                        msg_id: str | None = None, msg_seq: int = 1):
+        """markdown 消息 + @某人。群聊里 @ 用户只支持 markdown。"""
+        md = f'<qqbot-at-user id="{member_openid}" /> {content}'
+        body: dict = {"msg_type": 2, "markdown": {"content": md}, "msg_seq": msg_seq}
+        if msg_id:
+            body["msg_id"] = msg_id
+        return self.request("POST", f"/v2/groups/{group_openid}/messages", body)
+
     def bot_self(self):
         return self.request("GET", "/users/@me")

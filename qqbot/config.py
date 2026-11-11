@@ -54,6 +54,8 @@ class Config:
     llm_daily_limit: int = 200
     llm_trigger: str = "at"          # at | all
     llm_keywords: list[str] = field(default_factory=list)
+    # 回复时是否 @ 提问者（仅 markdown 消息支持）
+    reply_at_user: bool = False
     ssh_host: str = ""
     ssh_port: int = 22
     ssh_user: str = "root"
@@ -80,6 +82,7 @@ def load(path: str | Path | None = None) -> Config:
     srv = raw.get("server", {})
     panel = raw.get("panel", {})
     llm = raw.get("llm", {})
+    reply = raw.get("reply", {})
 
     app_id = os.getenv("QQBOT_APP_ID") or bot.get("app_id", "")
     app_secret = os.getenv("QQBOT_APP_SECRET") or bot.get("app_secret", "")
@@ -124,6 +127,7 @@ def load(path: str | Path | None = None) -> Config:
         llm_daily_limit=int(llm.get("daily_limit", 200)),
         llm_trigger=str(llm.get("trigger", "at")),
         llm_keywords=[str(x) for x in llm.get("keywords", [])],
+        reply_at_user=bool(reply.get("at_user", False)),
         ssh_host=os.getenv("QQBOT_SSH_HOST") or str(srv.get("host", "")),
         ssh_port=int(srv.get("port", 22)),
         ssh_user=os.getenv("QQBOT_SSH_USER") or str(srv.get("user", "root")),

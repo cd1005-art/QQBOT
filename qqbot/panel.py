@@ -291,6 +291,7 @@ class Panel:
             "dry_run": self.cfg.dry_run,
             "allowed_groups": self.cfg.allowed_groups,
             "at_all_template": self.cfg.at_all_template,
+            "reply_at_user": self.cfg.reply_at_user,
             "listen": f"{self.cfg.listen_host}:{self.cfg.listen_port}{self.cfg.webhook_path}",
             "panel": f"{self.cfg.panel_host}:{self.cfg.panel_port}",
             "db": str(self.cfg.db_path),
@@ -646,6 +647,15 @@ class _Handler(BaseHTTPRequestHandler):
             p.store.log_action("group-auto-rules", g, None,
                                json.dumps({"enabled": body.get("enabled")}), True, "changed")
             self._json({"ok": True})
+            return
+
+        if path == "/panel/api/settings/reply-at":
+            body = self._body()
+            enable = bool(body.get("enable"))
+            cfgedit.patch_many(p.cfg.source_path, "reply", {"at_user": enable})
+            p.cfg.reply_at_user = enable
+            p.store.log_action("reply-at", None, None, json.dumps({"enable": enable}), True, "changed")
+            self._json({"ok": True, "data": {"at_user": enable}})
             return
 
         if path == "/panel/api/settings/password":

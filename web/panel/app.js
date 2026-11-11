@@ -641,6 +641,16 @@ async function viewSettings() {
       </div>
     </div></div>
 
+    <div class="panel"><div class="panel-h">回复行为</div><div class="panel-b">
+      <div class="row" style="justify-content:space-between">
+        <div><b>回复时 @ 提问者</b>
+          <div class="hint" style="color:var(--muted);font-size:12px">
+            群聊里 @ 某人只支持 markdown 消息；开启后回复会带上 @，失败自动退回纯文本。</div></div>
+        <button class="btn ${d.reply_at_user ? "pri" : ""}" onclick="toggleReplyAt(${d.reply_at_user})">
+          ${d.reply_at_user ? "已开启" : "已关闭"}</button>
+      </div>
+    </div></div>
+
     <div class="panel"><div class="panel-h">修改面板密码</div><div class="panel-b">
       <div class="row" style="align-items:flex-end">
         <label class="field grow" style="margin:0"><span>原密码</span><input id="pwOld" type="password"></label>
@@ -667,6 +677,13 @@ async function toggleDry(current) {
   if (!ok) return;
   const j = await api("/panel/api/settings/dry-run", { method: "POST", body: JSON.stringify({ enable }) });
   if (j.ok) { toast(`dry_run 已${enable ? "开启" : "关闭"}`, "ok"); viewSettings(); }
+  else toast(j.error || "操作失败", "bad");
+}
+
+async function toggleReplyAt(current) {
+  const enable = !current;
+  const j = await api("/panel/api/settings/reply-at", { method: "POST", body: JSON.stringify({ enable }) });
+  if (j.ok) { toast(`回复${enable ? "已带上 @" : "已改为纯文本"}`, "ok"); viewSettings(); }
   else toast(j.error || "操作失败", "bad");
 }
 

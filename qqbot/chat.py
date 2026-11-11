@@ -166,14 +166,29 @@ class ChatEngine:
             return
         answer = answer[:MAX_REPLY_CHARS]
 
+        st = None
         try:
-            st, _ = self.api.send_message(group, answer, msg_id=message_id)
+            if self.cfg.reply_at_user and member:
+                st, _ = self.api.send_message_at(group, answer, member, msg_id=message_id)
+            else:
+                st, _ = self.api.send_message(group, answer, msg_id=message_id)
         except ApiError as exc:
-            # 常见：40034005 msg_id 过期 / 40034128 被动回复超限
-            print(f"[chat] 回复失败: {exc.code} {exc.message}", flush=True)
-            self.store.log_action("chat", group, member, question[:120], False,
-                                  f"reply {exc.code}")
-            return
+            # markdown 失败时退回纯文本，至少把话说完
+            if self.cfg.reply_at_user and member:
+                try:
+                    st, _ = self.api.send_message(group, answer, msg_id=message_id)
+                    print(f"[chat] @ 失败({exc.code})，已退回纯文本", flush=True)
+                except ApiError as exc2:
+                    print(f"[chat] 回复失败: {exc2.code} {exc2.message}", flush=True)
+                    self.store.log_action("chat", group, member, question[:120], False,
+                                          f"reply {exc2.code}")
+                    return
+            else:
+                # 常见：40034005 msg_id 过期 / 40034128 被动回复超限
+                print(f"[chat] 回复失败: {exc.code} {exc.message}", flush=True)
+                self.store.log_action("chat", group, member, question[:120], False,
+                                      f"reply {exc.code}")
+                return
 
         self._last_reply[group] = time.time()
         calls = self.store.bump_chat_usage(group, tokens)

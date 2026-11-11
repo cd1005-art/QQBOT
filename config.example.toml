@@ -48,6 +48,10 @@ cooldown = 3
 # 每群每天最多回复次数
 daily_limit = 200
 
+[reply]
+# 回复时是否 @ 提问者。群聊 @ 用户只支持 markdown 消息，失败会自动退回纯文本
+at_user = false
+
 [message]
 # 官方标签，纯文本 "@全体成员" 只会显示灰字、不触发提醒
 at_all_template = "<qqbot-at-everyone />"

@@ -1,7 +1,14 @@
 # QQBOT — QQ 官方机器人群管理控制台
 
+<p align="center">
+  <a href="https://qm.qq.com/cgi-bin/qm/qr?k=&jump_from=webapi&group_code=556269215">
+    <img src="https://img.shields.io/badge/QQ%E7%BE%A4-556269215-12B7F5?style=for-the-badge&logo=tencentqq&logoColor=white" alt="QQ群 556269215"></a>
+  <a href="https://github.com/cd1005-art/QQBOT/stargazers">
+    <img src="https://img.shields.io/github/stars/cd1005-art/QQBOT?style=for-the-badge&logo=github" alt="Stars"></a>
+</p>
+
 用 QQ 开放平台的官方能力，把群管理做成一个可自托管的控制台：**收事件、存证据、执行处置、留全痕**。
-不接第三方协议端，不模拟客户端，不做 AI 对话。
+不接第三方协议端，不模拟客户端。可选接入大模型：看图、对话、文生图，全部按需开关。
 
 ```
 QQ 平台 --HTTPS POST--> https://你的域名/qqbot/webhook
@@ -25,12 +32,6 @@ QQ 平台 --HTTPS POST--> https://你的域名/qqbot/webhook
   <img src="docs/shots/docs.png" width="49%" alt="文档页">
 </p>
 
-<p align="center">
-  <a href="https://qm.qq.com/cgi-bin/qm/qr?k=&jump_from=webapi&group_code=556269215">
-    <img src="https://img.shields.io/badge/QQ%E7%BE%A4-556269215-12B7F5?style=for-the-badge&logo=tencentqq&logoColor=white" alt="QQ群 556269215"></a>
-  <a href="https://github.com/cd1005-art/QQBOT/stargazers">
-    <img src="https://img.shields.io/github/stars/cd1005-art/QQBOT?style=for-the-badge&logo=github" alt="Stars"></a>
-</p>
 
 ## 能力
 

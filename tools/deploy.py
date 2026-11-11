@@ -73,15 +73,24 @@ def main() -> int:
             return 0
 
         print(f"== 上传到 {cfg.ssh_host}:{REMOTE} ==")
+        # 远端已有配置就不再覆盖：面板改过的配置（dry_run/key）以线上为准，
+        # 否则每次部署都会把线上设置冲掉。
+        _, keep_out, _ = client.exec_command(f"test -f {REMOTE}/config.toml && echo yes || echo no")
+        remote_has_cfg = keep_out.read().decode().strip() == "yes"
+        if remote_has_cfg:
+            print("  保留远端 config.toml（不覆盖）")
         run(client, f"mkdir -p {REMOTE}/qqbot {REMOTE}/web/panel {REMOTE}/tests {REMOTE}/deploy {REMOTE}/data")
         run(client, "mkdir -p /www/wwwroot/qqbot.oddpp.com/panel")
         sftp = client.open_sftp()
         for rel in FILES:
+            if rel == "config.toml" and remote_has_cfg:
+                continue
             local = ROOT / rel
             remote = f"{REMOTE}/{rel}"
             sftp.put(str(local), remote)
             print(f"  {rel}")
-        sftp.chmod(f"{REMOTE}/config.toml", 0o600)
+        if not remote_has_cfg:
+            sftp.chmod(f"{REMOTE}/config.toml", 0o600)
         # 前端同时铺到站点目录（nginx 直接读，不经过 Python）
         webroot = "/www/wwwroot/qqbot.oddpp.com"
         for name in ("index.html", "app.css", "app.js", "setup.html"):

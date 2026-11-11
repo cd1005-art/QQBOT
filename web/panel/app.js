@@ -267,10 +267,12 @@ async function loadGroup() {
 }
 
 async function groupOverview(g) {
-  const [j, setting] = await Promise.all([
+  const [j, setting, me] = await Promise.all([
     api(`/panel/api/groups/${g}/stats`),
     api(`/panel/api/groups/${g}/setting`),
+    api("/panel/api/me"),
   ]);
+  const locked = me.ok ? !!me.data.dry_run : true;
   const d = j.ok ? j.data : {};
   const autoOn = setting.ok ? !!setting.data.auto_rules : true;
   const info = d.info || {}, st = d.state || {};

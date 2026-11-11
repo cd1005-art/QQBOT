@@ -294,7 +294,7 @@ class Panel:
 
     def action(self, name: str, p: dict) -> dict:
         if self.cfg.dry_run:
-            raise PermissionError("dry_run 硬锁开启，面板写操作被拒绝。请先改 config.toml 的 safety.dry_run")
+            raise PermissionError("dry_run 硬锁开启，写操作被拒绝。到「设置 → 安全」点「解除锁定」即可，无需改文件")
         g = p.get("group") or ""
         if not g:
             raise ValueError("缺少 group")
@@ -342,7 +342,13 @@ class Panel:
             text = (p.get("text") or "").strip()
             if not text:
                 raise ValueError("内容为空")
-            st, data = self.api.send_message(g, text, p.get("message_id"))
+            try:
+                st, data = self.api.send_message(g, text, p.get("message_id"))
+            except ApiError as exc:
+                if exc.code == 40034105:
+                    raise ValueError("该群未开启「允许机器人主动在群聊内发言」，"
+                                     "请到手机 QQ 群设置里打开后再试") from None
+                raise
             self.store.log_action("send", g, None, json.dumps({"content": text}, ensure_ascii=False),
                                   True, f"HTTP {st}")
             return {"status": st, "id": data.get("id")}
@@ -350,7 +356,14 @@ class Panel:
         if name == "at-all":
             text = (p.get("text") or "").strip()
             content = f"{self.cfg.at_all_template} {text}".strip()
-            st, data = self.api.send_message(g, content)
+            try:
+                st, data = self.api.send_message(g, content)
+            except ApiError as exc:
+                if exc.code == 40034105:
+                    raise ValueError("该群未开启「允许机器人主动在群聊内发言」，请先到群设置打开") from None
+                if exc.code == 40034142:
+                    raise ValueError("该群今日 @全体成员 配额已用完（每群每天 1 次），明天再试") from None
+                raise
             self.store.log_action("at-all", g, None, json.dumps({"content": content}, ensure_ascii=False),
                                   True, f"HTTP {st}")
             return {"status": st, "id": data.get("id")}

@@ -85,31 +85,36 @@ class ImageGenClient:
         raise GenError(0, "返回里既没有 url 也没有 b64_json")
 
 
-VERBS = ("画一", "画个", "画张", "画幅", "画只", "生成", "绘制", "作图", "AI画", "ai画", "画一下")
+import re
+
+# 生成类动词。「做一张图」「出一张图」都要算，只认「画」会漏掉一半说法。
+VERB_RE = re.compile(r"(生成|绘制|作图|画|做|出)(一|个|张|幅|只|副)?(张|幅|只|副)?(图|图片|照片)?")
+LEAD_JUNK = ("机器人", "@", "帮我", "帮忙", "请", "麻烦", "给我", "能不能", "可以", "能否")
 
 
 def detect(text: str) -> str | None:
-    """识别「画一张 XXX」这类指令，返回用于模型的提示词。
+    """识别「画/做/生成 一张图…」这类指令，返回提示词。
 
-    命中条件：出现作画动词 + 图片相关名词，避免把「生成报告」误判。
+    必须同时满足：动词在句首附近、紧跟量词或「图/图片/照片」、全文含图相关字。
+    这样「今天画画很开心」「这张图做得不错」不会被误判。
     """
     t = (text or "").strip()
-    if not t or len(t) > 120:
+    if not t or len(t) > 160:
         return None
-    if not any(v in t for v in VERBS):
-        return None
-    if not (("图" in t) or ("画" in t)):
+    if not any(k in t for k in ("图", "画", "照片")):
         return None
 
-    prompt = t
-    for junk in ("机器人", "请", "帮我", "帮忙", "给我", "能不能", "可以"):
-        prompt = prompt.replace(junk, "")
-    prompt = prompt.strip("，。！？,.!? ")
+    body = t
+    for junk in LEAD_JUNK:
+        if body.startswith(junk):
+            body = body[len(junk):].lstrip("，, 。:：")
 
-    # 去掉最前面的动作词，只把描述留给模型
-    for v in sorted(VERBS, key=len, reverse=True):
-        if prompt.startswith(v):
-            prompt = prompt[len(v):]
-            break
-    prompt = prompt.strip("，。！？,.!? 一张个幅只")
+    m = VERB_RE.search(body)
+    if not m or m.start() > 10:
+        return None
+    if not (m.group(2) or m.group(3) or m.group(4)):
+        return None          # 只有动词没有量词/名词，多半是闲聊
+
+    prompt = body[m.end():].strip(" ：:，,。！？!?、\n")
+    prompt = prompt.strip("一张个幅只副的")
     return prompt or None

@@ -281,6 +281,9 @@ class ChatEngine:
                            max_tokens=self.cfg.llm_max_tokens,
                            temperature=self.cfg.llm_temperature)
         system = self.cfg.llm_system
+        if self.cfg.imagegen_enabled:
+            system += ("\n你能画图：用户说「画一张…」「做一张图…」「生成一张…」时系统会自动出图。"
+                       "如果用户只是描述想要什么图，提醒他用「画一张 + 描述」的句式。不要说自己做不了图。")
         if self.cfg.image_search_enabled:
             cats = "、".join(self.cfg.image_categories) or "无"
             system += (f"\n你可以发图片：当用户要图片时，系统会自动找图发送。"

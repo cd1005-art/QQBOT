@@ -280,7 +280,11 @@ def check_imagegen_intent():
     assert imagegen.detect("机器人，画一张赛博朋克城市夜景") == "赛博朋克城市夜景"
     assert imagegen.detect("帮我画一只橘猫") == "橘猫"
     assert imagegen.detect("生成一张二次元少女图")
+    # 「做/出」也要认：面板能测通、群里没反应，就是因为漏了这两个动词
+    assert imagegen.detect("机器人，帮我做一张图：一只坐在窗边的橘猫") == "坐在窗边的橘猫"
+    assert imagegen.detect("出一张赛博朋克图") == "赛博朋克图"
     assert imagegen.detect("生成报告") is None      # 不是画图
+    assert imagegen.detect("这张图做得不错") is None  # 闲聊不误判
     assert imagegen.detect("今天画画很开心") is None
     return "文生图意图识别通过"
 

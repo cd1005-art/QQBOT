@@ -731,6 +731,17 @@ async function viewRules() {
     <button class="btn pri" onclick="toggleRuleForm()">新建规则</button></div>
     <div class="panel" id="visionChatCard"><div class="panel-h">图片识别<span class="sp"></span>
       <span class="hint">让模型看懂图，参与群聊回答</span></div>
+      <div class="panel-b" style="border-bottom:1px solid var(--line)">
+        <div class="row" style="justify-content:space-between">
+          <div>
+            <b style="font-size:13px">网络找图</b>
+            <div class="hint" style="color:var(--muted);font-size:12px">
+              群友说「来张二次元图片」「找张搞笑图」时，从图源找一张发到群里。支持：二次元、动漫、搞笑、沙雕、恐怖、风景、宠物、猫、狗、游戏、汽车、美食、美女。</div>
+          </div>
+          <label style="display:flex;gap:8px;align-items:center;font-size:13px">
+            <input type="checkbox" id="vSearchOn" style="width:auto" onchange="saveVisionLite()"> 启用找图</label>
+        </div>
+      </div>
       <div class="panel-b">
         <div class="row" style="justify-content:space-between">
           <div>
@@ -818,6 +829,7 @@ async function loadVision() {
   const d = j.data;
   $("#vOn").checked = !!d.enabled;
   $("#vChatOn").checked = !!d.chat_enabled;
+  $("#vSearchOn").checked = !!d.image_search;
   $("#vModel").value = d.model_custom ? d.model : "";
   $("#vModel").placeholder = d.model_custom ? "" : `留空跟随：${d.model || "-"}`;
   $("#vAction").value = d.action || "recall_mute";
@@ -830,8 +842,9 @@ async function loadVision() {
 
 async function saveVisionLite() {
   const j = await api("/panel/api/vision", { method: "POST",
-    body: JSON.stringify({ chat_enabled: $("#vChatOn").checked }) });
-  if (j.ok) toast(`图片识别已${$("#vChatOn").checked ? "开启" : "关闭"}`, "ok");
+    body: JSON.stringify({ chat_enabled: $("#vChatOn").checked,
+                           image_search: $("#vSearchOn").checked }) });
+  if (j.ok) toast("图片能力已更新", "ok");
   else { toast(j.error || "保存失败", "bad"); $("#vChatOn").checked = !$("#vChatOn").checked; }
 }
 

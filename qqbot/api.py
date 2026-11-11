@@ -128,5 +128,26 @@ class QQOpenAPI:
             body["msg_id"] = msg_id
         return self.request("POST", f"/v2/groups/{group_openid}/messages", body)
 
+    def send_image(self, group_openid: str, image_url: str,
+                   msg_id: str | None = None, msg_seq: int = 1):
+        """先按 URL 让平台转存，再发富媒体消息。失败时退回二进制上传。"""
+        st, data = self.request("POST", f"/v2/groups/{group_openid}/files", {
+            "file_type": 1, "url": image_url, "srv_send_msg": False})
+        file_info = (data or {}).get("file_info")
+        if not file_info:
+            raise ApiError(st, None, "上传未返回 file_info", str(data)[:200])
+
+        body: dict = {"msg_type": 7, "media": {"file_info": file_info}, "msg_seq": msg_seq}
+        if msg_id:
+            body["msg_id"] = msg_id
+        return self.request("POST", f"/v2/groups/{group_openid}/messages", body)
+
+    def upload_image_bytes(self, group_openid: str, blob: bytes, file_name: str = "image.png"):
+        """二进制直传（≤5MB），用于 URL 转存失败的情况。"""
+        import base64
+        return self.request("POST", f"/v2/groups/{group_openid}/files", {
+            "file_type": 1, "file_name": file_name,
+            "file_data": base64.b64encode(blob).decode(), "srv_send_msg": False})
+
     def bot_self(self):
         return self.request("GET", "/users/@me")

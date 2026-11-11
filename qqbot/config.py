@@ -68,6 +68,9 @@ class Config:
     vision_notice: str = ""
     vision_max_bytes: int = 8 * 1024 * 1024
     vision_max_tokens: int = 800
+    # 网络找图
+    image_search_enabled: bool = False
+    image_max_bytes: int = 5 * 1024 * 1024
     ssh_host: str = ""
     ssh_port: int = 22
     ssh_user: str = "root"
@@ -96,6 +99,7 @@ def load(path: str | Path | None = None) -> Config:
     llm = raw.get("llm", {})
     reply = raw.get("reply", {})
     vision = raw.get("vision", {})
+    image = raw.get("image", {})
 
     app_id = os.getenv("QQBOT_APP_ID") or bot.get("app_id", "")
     app_secret = os.getenv("QQBOT_APP_SECRET") or bot.get("app_secret", "")
@@ -152,6 +156,8 @@ def load(path: str | Path | None = None) -> Config:
         vision_notice=str(vision.get("notice", "")),
         vision_max_bytes=int(vision.get("max_bytes", 8 * 1024 * 1024)),
         vision_max_tokens=int(vision.get("max_tokens", 800)),
+        image_search_enabled=bool(image.get("search_enabled", False)),
+        image_max_bytes=int(image.get("max_bytes", 5 * 1024 * 1024)),
         ssh_host=os.getenv("QQBOT_SSH_HOST") or str(srv.get("host", "")),
         ssh_port=int(srv.get("port", 22)),
         ssh_user=os.getenv("QQBOT_SSH_USER") or str(srv.get("user", "root")),

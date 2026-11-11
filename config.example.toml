@@ -72,6 +72,12 @@ max_tokens = 800
 # 判定提示词，留空用内置默认（要求模型只输出 JSON）
 prompt = ""
 
+[image]
+# 网络找图：群友说「来张二次元图片」时，从图源找一张发到群里
+search_enabled = false
+# 单张上限，二进制直传平台限制 5MB
+max_bytes = 5242880
+
 [message]
 # 官方标签，纯文本 "@全体成员" 只会显示灰字、不触发提醒
 at_all_template = "<qqbot-at-everyone />"

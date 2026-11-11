@@ -200,6 +200,7 @@ class Panel:
         return {
             "enabled": c.vision_enabled,
             "chat_enabled": c.vision_chat_enabled,
+            "image_search": c.image_search_enabled,
             "model": c.vision_model or c.llm_model,
             "model_custom": bool(c.vision_model),
             "base_url": c.vision_base_url or c.llm_base_url,
@@ -223,6 +224,9 @@ class Panel:
         if "chat_enabled" in body:
             c.vision_chat_enabled = bool(body["chat_enabled"])
             items["chat_enabled"] = c.vision_chat_enabled
+        if "image_search" in body:
+            c.image_search_enabled = bool(body["image_search"])
+            cfgedit.patch_many(c.source_path, "image", {"search_enabled": c.image_search_enabled})
         if "model" in body:
             c.vision_model = str(body["model"]).strip(); items["model"] = c.vision_model
         if "base_url" in body:

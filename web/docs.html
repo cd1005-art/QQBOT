@@ -63,6 +63,7 @@ th{color:var(--muted);font-weight:500}
   <a href="#schedules">定时任务</a>
   <a href="#chat">对话（大模型）</a>
   <a href="#vision">图片识别与审核</a>
+  <a href="#imgsearch">网络找图</a>
   <a href="#at">回复 @ 提问者</a>
   <a href="#security">安全模型</a>
   <div class="t" style="margin-top:14px">参考</div>
@@ -193,6 +194,11 @@ journalctl -u qqbot -f</pre>
     <tr><td><code>notice</code></td><td>违规后是否在群里补一句提示</td></tr>
   </table>
   <div class="tip">模型输出要求纯 JSON；解析失败按「不违规」处理，避免误伤。建议先用 <code>none</code> 观察几天再切到处置。</div>
+
+  <h2 id="imgsearch">网络找图</h2>
+  <p>群友说「来张二次元图片」时，从 360 图片接口取图并发送到群。URL 由平台转存，失败自动退回二进制上传。</p>
+  <p><code>[image] search_enabled</code> 控制开关，<code>max_bytes</code> 默认 5MB（二进制直传上限）。</p>
+  <div class="warn">图源是公开搜索，内容不受控。「美女」「恐怖」等类别有被平台判违规的风险，建议只保留二次元、搞笑、风景、宠物等安全类别。</div>
 
   <h2 id="at">回复时 @ 提问者</h2>
   <p>群聊里 @ 某人只支持 markdown 消息。开启 <code>[reply] at_user</code> 后，回复会以 markdown 发送，

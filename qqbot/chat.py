@@ -24,6 +24,7 @@ from .api import ApiError, QQOpenAPI
 from .config import Config
 from .llm import LLMClient, LLMError
 from .vision import fetch_image, image_block
+from . import imagepick
 from .store import Store
 
 AT_TAG = re.compile(r"<@!?[0-9A-Za-z_\-]+>")
@@ -121,6 +122,42 @@ class ChatEngine:
 
     # ---------------- 主循环 ----------------
 
+    def _send_found_image(self, group: str, member: str, message_id: str, query: str):
+        cand = imagepick.pick(query, self.cfg.image_max_bytes)
+        if not cand:
+            try:
+                self.api.send_message(group, "没找到合适的图，换个说法试试。", msg_id=message_id)
+            except ApiError:
+                pass
+            self.store.log_action("image", group, member, query, False, "未找到可用图片")
+            return
+
+        st = None
+        try:
+            st, _ = self.api.send_image(group, cand["url"], msg_id=message_id)
+        except ApiError as exc:
+            # URL 转存失败（850026 等）时，退回二进制上传
+            try:
+                blob, mime = fetch_image(cand["url"], self.cfg.image_max_bytes)
+                ext = "png" if "png" in mime else "jpg"
+                up_st, up = self.api.upload_image_bytes(group, blob, f"image.{ext}")
+                info = (up or {}).get("file_info")
+                if not info:
+                    raise ApiError(up_st, None, "二进制上传无 file_info")
+                st, _ = self.api.request("POST", f"/v2/groups/{group}/messages", {
+                    "msg_type": 7, "media": {"file_info": info},
+                    "msg_id": message_id, "msg_seq": 1})
+                print(f"[chat] 转存失败({exc.code})，已改用二进制上传", flush=True)
+            except (ApiError, Exception) as exc2:
+                print(f"[chat] 发图失败: {exc2}", flush=True)
+                self.store.log_action("image", group, member, query, False, str(exc2)[:120])
+                return
+
+        self._last_reply[group] = time.time()
+        self.store.log_action("image", group, member, query, True,
+                              f"HTTP {st} {cand.get('width')}x{cand.get('height')} {cand.get('bytes')}B")
+        print(f"[chat] 已发图 群={group[:8]}… {query} {cand.get('bytes')}B", flush=True)
+
     def _run(self):
         while not self._stop.is_set():
             try:
@@ -151,6 +188,13 @@ class ChatEngine:
         # 冷却
         if now - self._last_reply.get(group, 0) < self.cfg.llm_cooldown:
             return
+
+        # 找图意图优先，直接发图，不走模型
+        if self.cfg.image_search_enabled:
+            query = imagepick.detect(question)
+            if query:
+                self._send_found_image(group, member, message_id, query)
+                return
         # 日限额
         if self.store.chat_calls_today(group) >= self.cfg.llm_daily_limit:
             print(f"[chat] 群 {group[:8]}… 达每日上限", flush=True)

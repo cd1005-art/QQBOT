@@ -20,6 +20,7 @@ from qqbot.ingest import ingest  # noqa: E402
 from qqbot.rules import Engine  # noqa: E402
 from qqbot.scheduler import CronError, match, next_after, parse  # noqa: E402
 from qqbot.sign import Signer, derive_seed  # noqa: E402
+from qqbot import imagepick  # noqa: E402
 from qqbot.vision import image_block, parse_verdict  # noqa: E402
 from qqbot.store import Store  # noqa: E402
 
@@ -242,6 +243,16 @@ def check_image_block():
     return "图片识别：多模态块构造 / 纯图触发 / 开关生效 通过"
 
 
+def check_image_intent():
+    assert imagepick.detect("来张二次元图片") == "二次元 动漫 壁纸"
+    assert imagepick.detect("找张搞笑图") == "搞笑 表情包"
+    assert imagepick.detect("来一张风景照片") == "风景 壁纸"
+    assert imagepick.detect("今天天气不错") is None
+    assert imagepick.detect("来张图片") is None            # 没类别不猜
+    assert imagepick.detect("来张二次元" + "图" * 40) is None  # 太长当闲聊
+    return "找图意图识别通过"
+
+
 def check_send_at():
     from qqbot.api import QQOpenAPI
     from qqbot.auth import TokenManager
@@ -285,6 +296,7 @@ def main() -> int:
     print(check_send_at())
     print(check_verdict())
     print(check_image_block())
+    print(check_image_intent())
     print("smoke ok")
     return 0
 

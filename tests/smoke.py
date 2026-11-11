@@ -254,10 +254,22 @@ def check_image_intent():
     safe = ["二次元", "搞笑", "风景"]
     assert imagepick.detect("来张二次元图片", safe) == "二次元 动漫 壁纸"
     assert imagepick.detect("来张美女图片", safe) is None      # 未放行
-    assert imagepick.detect("来张美女图片", []) == "美女 写真 唯美"  # 空=不限制
+    # 语义变更：空列表 = 全部禁止；None = 内部不限制
+    assert imagepick.detect("来张美女图片", []) is None
+    assert imagepick.detect("来张美女图片", None) == "美女 写真 唯美"
     assert imagepick.detect("来张猫咪图", ["猫", "宠物"]) == "猫咪 可爱"  # 长类别优先
 
     # 类别未放行时，仍能识别出来，由上层决定怎么回答
+    # 「来几张」这种变体也要认得出来
+    assert imagepick.intent("机器人，来几张好看的漫画图") is True
+    assert imagepick.classify("机器人，来几张好看的漫画图", ["漫画"])["key"] == "漫画"
+    # 省略「图片」二字，只给类别也能触发
+    assert imagepick.intent("来几张二次元") is True
+    # 没指定类别时随机挑已启用的
+    rnd = imagepick.random_choice(["二次元", "漫画"])
+    assert rnd and rnd["key"] in ("二次元", "漫画"), rnd
+    assert imagepick.random_choice([]) is None
+
     info = imagepick.classify("来张好看的漫画", ["二次元"])
     assert info and info["key"] == "漫画" and info["allowed"] is False, info
     assert imagepick.classify("来张好看的漫画", ["漫画"])["allowed"] is True

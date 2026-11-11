@@ -193,10 +193,10 @@ class ChatEngine:
         if self.cfg.image_search_enabled:
             info = imagepick.classify(question, self.cfg.image_categories)
             if info and not info["allowed"]:
-                enabled = "、".join(self.cfg.image_categories) or "无"
+                enabled = "、".join(self.cfg.image_categories) or "（未启用任何类别）"
                 try:
                     self.api.send_message(
-                        group, f"「{info['key']}」这类图没开，当前能发：{enabled}。", msg_id=message_id)
+                        group, f"「{info['key']}」这类图没开。当前能发：{enabled}。", msg_id=message_id)
                 except ApiError:
                     pass
                 self.store.log_action("image", group, member, question[:60], False,
@@ -205,6 +205,19 @@ class ChatEngine:
             if info:
                 self._send_found_image(group, member, message_id, info["query"])
                 return
+            # 说了要图但没指定类别 → 从已启用类别里随机
+            if imagepick.intent(question):
+                if not self.cfg.image_categories:
+                    try:
+                        self.api.send_message(group, "图片功能还没启用任何类别，请先在面板勾选。",
+                                              msg_id=message_id)
+                    except ApiError:
+                        pass
+                    return
+                pick = imagepick.random_choice(self.cfg.image_categories)
+                if pick:
+                    self._send_found_image(group, member, message_id, pick["query"])
+                    return
         # 日限额
         if self.store.chat_calls_today(group) >= self.cfg.llm_daily_limit:
             print(f"[chat] 群 {group[:8]}… 达每日上限", flush=True)

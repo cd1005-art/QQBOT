@@ -39,7 +39,22 @@ CATEGORIES: dict[str, str] = {
     "美女": "美女 写真 唯美",
 }
 
-VERBS = ("来张", "来一张", "找张", "找一张", "发张", "发一张", "整张", "给我一张", "来点", "找点")
+# 只要「动作字 + 图相关字」同时出现就认，避免「来几张」这类变体漏判
+VERBS = ("来", "找", "发", "要", "给", "整", "换", "搜", "随机", "随便")
+NOUNS = ("图", "照片", "壁纸", "表情包", "壁纸图")
+
+
+def intent(text: str) -> bool:
+    """动作字 + （图片类名词 或 已支持的类别名）即认为在要图。
+
+    这样「来几张二次元」这种省略了「图片」二字的说法也能命中。
+    """
+    t = (text or "").strip()
+    if not t or len(t) > 40:
+        return False
+    if not any(v in t for v in VERBS):
+        return False
+    return any(n in t for n in NOUNS) or any(k in t for k in CATEGORIES)
 
 
 def classify(text: str, allowed: list[str] | None = None) -> dict | None:
@@ -49,16 +64,24 @@ def classify(text: str, allowed: list[str] | None = None) -> dict | None:
     让调用方能明确告诉用户「这类没开」，而不是把话丢给模型瞎编。
     """
     t = (text or "").strip()
-    if not t or len(t) > 40:
-        return None
-    has_verb = any(v in t for v in VERBS) or ("图片" in t) or ("照片" in t)
-    if not has_verb:
+    if not intent(t):
         return None
     for key in sorted(CATEGORIES, key=len, reverse=True):
         if key in t:
-            ok = not allowed or key in allowed
+            # allowed 为 None 表示内部不限制；空列表表示「一个都不允许」
+            ok = allowed is None or key in allowed
             return {"key": key, "query": CATEGORIES[key], "allowed": ok}
     return None
+
+
+def random_choice(allowed: list[str]) -> dict | None:
+    """没指定类别时，从已启用类别里随机挑一个。"""
+    pool = [k for k in CATEGORIES if k in (allowed or [])]
+    if not pool:
+        return None
+    import random
+    key = random.choice(pool)
+    return {"key": key, "query": CATEGORIES[key], "allowed": True}
 
 
 def detect(text: str, allowed: list[str] | None = None) -> str | None:
@@ -107,8 +130,9 @@ def pick(query: str, max_bytes: int = 5 * 1024 * 1024) -> dict | None:
         try:
             req = urllib.request.Request(cand["url"], headers=UA)
             with urllib.request.urlopen(req, timeout=10) as resp:
-                ctype = (resp.headers.get("Content-Type") or "").split(";")[0]
-                if not ctype.startswith("image/"):
+                ctype = (resp.headers.get("Content-Type") or "").split(";")[0].lower()
+                # 平台富媒体只收 png/jpg，gif/webp 会被拒，直接跳过
+                if ctype not in ("image/jpeg", "image/jpg", "image/png"):
                     continue
                 blob = resp.read(max_bytes + 1)
             if len(blob) > max_bytes or len(blob) < 1024:

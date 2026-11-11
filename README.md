@@ -41,6 +41,7 @@ QQ 平台 --HTTPS POST--> https://你的域名/qqbot/webhook
 | 群级自动处置开关 | 可用 |
 | 大模型群聊对话（任意 OpenAI 兼容接口） | 可用，需自填 key |
 | 回复时 @ 提问者（markdown 消息） | 可用，开关控制 |
+| 群图片识别与违规审核（撤回 / 禁言） | 可用，需视觉模型 |
 | 移出成员 / 群黑名单 / 成员列表接口 | **平台未开放（11253）** |
 
 ## 快速开始
@@ -192,6 +193,31 @@ daily_limit = 200       # 每群每天最多回复次数
 - 每群独立冷却与日限额，`chat_usage` 表按天累计调用数与 token
 - `chat_history` 保留最近对话，既做上下文也做留档，可在面板「对话」页查看
 - 面板内可直接改配置、点「发送测试」验证连通性，不用改文件重启
+
+## 图片识别与审核
+
+群里发图片时，事件里带 `attachments[].url`（带签名的临时地址）。开启后流程是：
+
+```
+下载图片（默认上限 8MB） → 视觉模型判断 → 违规就撤回 / 禁言 / 提示
+```
+
+```toml
+[vision]
+enabled = false
+model = ""          # 留空跟随 [llm] 的 model
+base_url = ""       # 留空跟随 [llm]
+api_key = ""        # 留空跟随 [llm]
+action = "recall_mute"   # recall | mute | recall_mute | none
+minutes = 10
+notice = ""         # 违规后补一句提示，留空则只处置
+```
+
+- 模型必须支持图像输入（`/v1/chat/completions` 的 `image_url` 内容块）
+- 要求模型只输出 JSON，解析失败按「不违规」处理，宁可漏判不误伤
+- 兼容 `violation` / `is_violation`、`summary` / `description` 等字段名差异
+- 推理型模型会先消耗 reasoning token，`max_tokens` 默认给到 800
+- 同一消息只审一次；结果写 `disposals` 与审计，面板「规则 → 图片审核」可查
 
 ## 回复时 @ 提问者
 

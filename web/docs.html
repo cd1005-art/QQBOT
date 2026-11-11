@@ -62,6 +62,7 @@ th{color:var(--muted);font-weight:500}
   <a href="#rules">规则与自动处置</a>
   <a href="#schedules">定时任务</a>
   <a href="#chat">对话（大模型）</a>
+  <a href="#vision">图片识别与审核</a>
   <a href="#at">回复 @ 提问者</a>
   <a href="#security">安全模型</a>
   <div class="t" style="margin-top:14px">参考</div>
@@ -175,6 +176,17 @@ journalctl -u qqbot -f</pre>
     <tr><td><code>daily_limit</code></td><td>每群每天最多回复次数</td></tr>
   </table>
   <p>回复走被动消息（带原 <code>msg_id</code>），受平台 5 分钟 / 5 次窗口限制；超窗口会失败并记入审计，不会退化成主动消息刷屏。</p>
+
+  <h2 id="vision">图片识别与审核</h2>
+  <p>群图片事件带签名下载地址，服务端直接拉取后交给视觉模型判断，命中违规即按配置撤回、禁言或仅记录。</p>
+  <table>
+    <tr><th>配置</th><th>说明</th></tr>
+    <tr><td><code>model</code> / <code>base_url</code> / <code>api_key</code></td><td>留空则跟随 <code>[llm]</code>；模型必须支持图像输入</td></tr>
+    <tr><td><code>action</code></td><td><code>recall</code> / <code>mute</code> / <code>recall_mute</code> / <code>none</code>（只记录）</td></tr>
+    <tr><td><code>minutes</code></td><td>禁言时长</td></tr>
+    <tr><td><code>notice</code></td><td>违规后是否在群里补一句提示</td></tr>
+  </table>
+  <div class="tip">模型输出要求纯 JSON；解析失败按「不违规」处理，避免误伤。建议先用 <code>none</code> 观察几天再切到处置。</div>
 
   <h2 id="at">回复时 @ 提问者</h2>
   <p>群聊里 @ 某人只支持 markdown 消息。开启 <code>[reply] at_user</code> 后，回复会以 markdown 发送，

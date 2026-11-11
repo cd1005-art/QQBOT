@@ -56,6 +56,17 @@ class Config:
     llm_keywords: list[str] = field(default_factory=list)
     # 回复时是否 @ 提问者（仅 markdown 消息支持）
     reply_at_user: bool = False
+    # 图片审核（视觉模型）
+    vision_enabled: bool = False
+    vision_model: str = ""
+    vision_base_url: str = ""
+    vision_api_key: str = ""
+    vision_prompt: str = ""
+    vision_action: str = "recall_mute"
+    vision_minutes: int = 10
+    vision_notice: str = ""
+    vision_max_bytes: int = 8 * 1024 * 1024
+    vision_max_tokens: int = 800
     ssh_host: str = ""
     ssh_port: int = 22
     ssh_user: str = "root"
@@ -83,6 +94,7 @@ def load(path: str | Path | None = None) -> Config:
     panel = raw.get("panel", {})
     llm = raw.get("llm", {})
     reply = raw.get("reply", {})
+    vision = raw.get("vision", {})
 
     app_id = os.getenv("QQBOT_APP_ID") or bot.get("app_id", "")
     app_secret = os.getenv("QQBOT_APP_SECRET") or bot.get("app_secret", "")
@@ -128,6 +140,16 @@ def load(path: str | Path | None = None) -> Config:
         llm_trigger=str(llm.get("trigger", "at")),
         llm_keywords=[str(x) for x in llm.get("keywords", [])],
         reply_at_user=bool(reply.get("at_user", False)),
+        vision_enabled=bool(vision.get("enabled", False)),
+        vision_model=str(vision.get("model", "")),
+        vision_base_url=str(vision.get("base_url", "")),
+        vision_api_key=str(vision.get("api_key", "")),
+        vision_prompt=str(vision.get("prompt", "")),
+        vision_action=str(vision.get("action", "recall_mute")),
+        vision_minutes=int(vision.get("minutes", 10)),
+        vision_notice=str(vision.get("notice", "")),
+        vision_max_bytes=int(vision.get("max_bytes", 8 * 1024 * 1024)),
+        vision_max_tokens=int(vision.get("max_tokens", 800)),
         ssh_host=os.getenv("QQBOT_SSH_HOST") or str(srv.get("host", "")),
         ssh_port=int(srv.get("port", 22)),
         ssh_user=os.getenv("QQBOT_SSH_USER") or str(srv.get("user", "root")),

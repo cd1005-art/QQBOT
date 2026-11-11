@@ -174,6 +174,7 @@ def serve(cfg: Config, store: Store, signer: "Signer | None"):
     from .panel import build_server as build_panel
 
     from .chat import ChatEngine
+    from .moderation import VisionEngine
     from .rules import Engine
     from .scheduler import Scheduler
 
@@ -182,6 +183,7 @@ def serve(cfg: Config, store: Store, signer: "Signer | None"):
 
     engine = Engine(cfg, store, api)
     chat = ChatEngine(cfg, store, api)
+    vision = VisionEngine(cfg, store, api)
 
     def _on_message(event: str, data: dict):
         engine.submit(data.get("group_openid") or "",
@@ -190,6 +192,10 @@ def serve(cfg: Config, store: Store, signer: "Signer | None"):
                       data.get("id") or "",
                       data.get("content") or "")
         chat.submit(event, data)
+        vision.submit(data.get("group_openid") or "",
+                      ((data.get("author") or {}).get("member_openid") or ""),
+                      data.get("id") or "",
+                      data.get("attachments") or [])
 
     pipeline = _Pipeline(store, verbose=cfg.log_events,
                         on_message=_on_message if cfg.has_credentials() else None)
@@ -200,6 +206,9 @@ def serve(cfg: Config, store: Store, signer: "Signer | None"):
         scheduler = Scheduler(cfg, store, api)
         scheduler.start()
         chat.start()
+        vision.start()
+        if cfg.vision_enabled:
+            print(f"[vision] 图片审核已启用 model={cfg.vision_model or cfg.llm_model}", flush=True)
         if cfg.llm_enabled:
             print(f"[chat] 对话已启用 model={cfg.llm_model} trigger={cfg.llm_trigger}", flush=True)
 
@@ -223,6 +232,7 @@ def serve(cfg: Config, store: Store, signer: "Signer | None"):
         httpd.serve_forever(poll_interval=0.5)
     finally:
         chat.stop()
+        vision.stop()
         if engine:
             engine.stop()
         if scheduler:

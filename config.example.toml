@@ -52,6 +52,24 @@ daily_limit = 200
 # 回复时是否 @ 提问者。群聊 @ 用户只支持 markdown 消息，失败会自动退回纯文本
 at_user = false
 
+[vision]
+# 群图片自动审核：下载图片 → 视觉模型判断 → 违规则撤回/禁言
+enabled = false
+# 以下三项留空表示沿用 [llm] 的配置
+model = ""
+base_url = ""
+api_key = ""
+# 违规动作：recall | mute | recall_mute | none
+action = "recall_mute"
+minutes = 10
+# 违规后补一句提示，留空则只处置不发言
+notice = ""
+# 单张图片大小上限（字节）
+max_bytes = 8388608
+max_tokens = 800
+# 判定提示词，留空用内置默认（要求模型只输出 JSON）
+prompt = ""
+
 [message]
 # 官方标签，纯文本 "@全体成员" 只会显示灰字、不触发提醒
 at_all_template = "<qqbot-at-everyone />"

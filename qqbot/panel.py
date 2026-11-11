@@ -193,6 +193,57 @@ class Panel:
         ])
         return {"answer": answer, "tokens": tokens, "model": self.cfg.llm_model}
 
+    # ---------------- 图片审核 ----------------
+
+    def vision_settings(self) -> dict:
+        c = self.cfg
+        return {
+            "enabled": c.vision_enabled,
+            "model": c.vision_model or c.llm_model,
+            "model_custom": bool(c.vision_model),
+            "base_url": c.vision_base_url or c.llm_base_url,
+            "action": c.vision_action,
+            "minutes": c.vision_minutes,
+            "notice": c.vision_notice,
+            "prompt": c.vision_prompt,
+            "usage": {
+                "checked": len([r for r in self.store.recent_audit(200)
+                                if r["action"] in ("vision", "vision-ok")]),
+                "blocked": len([r for r in self.store.recent_disposals(200)
+                                if (r["action"] or "").startswith("vision")]),
+            },
+        }
+
+    def save_vision(self, body: dict) -> dict:
+        c = self.cfg
+        items = {}
+        if "enabled" in body:
+            c.vision_enabled = bool(body["enabled"]); items["enabled"] = c.vision_enabled
+        if "model" in body:
+            c.vision_model = str(body["model"]).strip(); items["model"] = c.vision_model
+        if "base_url" in body:
+            c.vision_base_url = str(body["base_url"]).strip(); items["base_url"] = c.vision_base_url
+        if "action" in body:
+            act = str(body["action"])
+            if act not in ("recall", "mute", "recall_mute", "none"):
+                raise ValueError("action 只能是 recall / mute / recall_mute / none")
+            c.vision_action = act; items["action"] = act
+        if "minutes" in body:
+            m = int(body["minutes"])
+            if not 1 <= m <= 43200:
+                raise ValueError("minutes 1~43200")
+            c.vision_minutes = m; items["minutes"] = m
+        if "notice" in body:
+            c.vision_notice = str(body["notice"]).strip(); items["notice"] = c.vision_notice
+        if "prompt" in body:
+            c.vision_prompt = str(body["prompt"]).strip(); items["prompt"] = c.vision_prompt
+        if items:
+            cfgedit.patch_many(c.source_path, "vision", items)
+        self.store.log_action("vision-save", None, None,
+                              json.dumps({k: v for k, v in body.items() if k != "api_key"},
+                                         ensure_ascii=False), True, "saved")
+        return self.vision_settings()
+
     # ---------------- 首次配置 ----------------
 
     def setup_status(self) -> dict:
@@ -500,6 +551,11 @@ class _Handler(BaseHTTPRequestHandler):
             elif path.startswith("/panel/api/groups/") and path.endswith("/stats"):
                 g = path.split("/")[4]
                 self._json({"ok": True, "data": p.group_detail(g)})
+            elif path == "/panel/api/vision":
+                self._json({"ok": True, "data": p.vision_settings()})
+            elif path == "/panel/api/vision/results":
+                self._json({"ok": True, "data": [dict(r) for r in
+                                                 p.store.recent_disposals(int(qs.get("limit", ["30"])[0]))]})
             elif path == "/panel/api/llm":
                 self._json({"ok": True, "data": p.llm_settings()})
             elif path == "/panel/api/chat":
@@ -557,6 +613,13 @@ class _Handler(BaseHTTPRequestHandler):
 
         if not self._authed():
             self._json({"ok": False, "error": "unauthorized"}, 401)
+            return
+
+        if path == "/panel/api/vision":
+            try:
+                self._json({"ok": True, "data": p.save_vision(self._body())})
+            except (ValueError, TypeError) as exc:
+                self._json({"ok": False, "error": str(exc)}, 400)
             return
 
         if path == "/panel/api/llm":

@@ -701,6 +701,35 @@ async function viewRules() {
   $("#main").innerHTML = `<div class="topbar"><h1>规则</h1><span class="sp"></span>
     <span class="meta">命中即处置，处置结果写入「处置记录」</span>
     <button class="btn pri" onclick="toggleRuleForm()">新建规则</button></div>
+    <div class="panel" id="visionCard"><div class="panel-h">图片审核<span class="sp"></span>
+      <span class="hint">视觉模型判断违规，命中即处置</span></div>
+      <div class="panel-b">
+        <div class="row" style="align-items:flex-end;margin-bottom:10px">
+          <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-bottom:6px">
+            <input type="checkbox" id="vOn" style="width:auto"> 启用</label>
+          <label class="field" style="margin:0;width:190px"><span>模型</span>
+            <input id="vModel" placeholder="留空跟随对话模型"></label>
+          <label class="field" style="margin:0;width:160px"><span>违规动作</span>
+            <select id="vAction">
+              <option value="recall_mute">撤回 + 禁言</option>
+              <option value="recall">仅撤回</option>
+              <option value="mute">仅禁言</option>
+              <option value="none">只记录</option>
+            </select></label>
+          <label class="field" style="margin:0;width:110px"><span>禁言分钟</span>
+            <input id="vMinutes" value="10"></label>
+          <label class="field grow" style="margin:0"><span>违规提示（留空不发言）</span>
+            <input id="vNotice" placeholder="图片违规，已处理"></label>
+        </div>
+        <label class="field" style="margin-bottom:8px"><span>判定提示词（留空用内置）</span>
+          <textarea id="vPrompt" placeholder="留空使用内置提示词：只输出 JSON"></textarea></label>
+        <div class="row">
+          <button class="btn pri" onclick="saveVision()">保存审核配置</button>
+          <span class="hint" id="vStat" style="color:var(--muted);font-size:12px"></span>
+        </div>
+      </div>
+      <div class="flush" id="vResults"></div>
+    </div>
     <div class="panel hide" id="ruleForm"><div class="panel-h">新建规则</div><div class="panel-b">
       <div class="row" style="align-items:flex-end">
         <label class="field grow" style="margin:0"><span>名称</span><input id="rName" placeholder="例如：广告词拦截"></label>
@@ -737,6 +766,39 @@ async function viewRules() {
         <span>${esc(groupLabel(x))}</span></label>`).join("")
     : '<span class="hint" style="color:var(--muted);font-size:12px">暂无群</span>';
   loadRules();
+  loadVision();
+}
+
+async function loadVision() {
+  const j = await api("/panel/api/vision");
+  if (!j.ok) return;
+  const d = j.data;
+  $("#vOn").checked = !!d.enabled;
+  $("#vModel").value = d.model_custom ? d.model : "";
+  $("#vModel").placeholder = d.model_custom ? "" : `留空跟随：${d.model || "-"}`;
+  $("#vAction").value = d.action || "recall_mute";
+  $("#vMinutes").value = d.minutes || 10;
+  $("#vNotice").value = d.notice || "";
+  $("#vPrompt").value = d.prompt || "";
+  $("#vStat").textContent = `近 200 次操作中：识别 ${(d.usage || {}).checked || 0} 次，拦截 ${(d.usage || {}).blocked || 0} 次`;
+  loadVisionResults();
+}
+
+async function saveVision() {
+  const body = { enabled: $("#vOn").checked, model: $("#vModel").value.trim(),
+    action: $("#vAction").value, minutes: parseInt($("#vMinutes").value || "10", 10),
+    notice: $("#vNotice").value.trim(), prompt: $("#vPrompt").value.trim() };
+  const j = await api("/panel/api/vision", { method: "POST", body: JSON.stringify(body) });
+  if (j.ok) { toast("图片审核配置已保存", "ok"); loadVision(); }
+  else toast(j.error || "保存失败", "bad");
+}
+
+async function loadVisionResults() {
+  const j = await api("/panel/api/vision/results?limit=8");
+  const rows = (j.ok ? j.data : []).filter(r => (r.action || "").startsWith("vision") || r.action === "vision-ok");
+  $("#vResults").innerHTML = rows.length
+    ? disposalTable(rows)
+    : empty("暂无识别记录", "群里有图片消息时会自动判断");
 }
 
 function toggleRuleForm() { $("#ruleForm").classList.toggle("hide"); }

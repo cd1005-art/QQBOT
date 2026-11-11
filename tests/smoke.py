@@ -20,6 +20,7 @@ from qqbot.ingest import ingest  # noqa: E402
 from qqbot.rules import Engine  # noqa: E402
 from qqbot.scheduler import CronError, match, next_after, parse  # noqa: E402
 from qqbot.sign import Signer, derive_seed  # noqa: E402
+from qqbot.vision import parse_verdict  # noqa: E402
 from qqbot.store import Store  # noqa: E402
 
 # 官方文档给出的校验样例
@@ -193,6 +194,29 @@ def check_chat(store: Store):
     return "对话触发判定 / 上下文 / 用量计数 通过"
 
 
+def check_verdict():
+    v = parse_verdict('{"violation":true,"category":"广告","reason":"含二维码","summary":"一张引流图"}')
+    assert v["violation"] and v["category"] == "广告", v
+
+    fenced = parse_verdict('```json\n{"violation":false,"summary":"风景照"}\n```')
+    assert not fenced["violation"] and fenced["summary"] == "风景照", fenced
+
+    chatty = parse_verdict('分析如下：{"violation":true,"summary":"涉赌"} 以上。')
+    assert chatty["violation"] is True and chatty["parsed"] is True, chatty
+
+    # 模型可能用 is_violation / description 这类字段名
+    alias = parse_verdict('{"is_violation": false, "description": "人像摄影", "reason": "衣着完整"}')
+    assert alias["violation"] is False and alias["summary"] == "人像摄影", alias
+
+    # 布尔值可能被写成字符串
+    strflag = parse_verdict('{"violation":"true","summary":"二维码引流图"}')
+    assert strflag["violation"] is True, strflag
+
+    broken = parse_verdict("我看不清这张图片")
+    assert broken["violation"] is False and broken["parsed"] is False, broken
+    return "视觉判定 JSON 解析（标准 / 代码块 / 噪声 / 无法解析）通过"
+
+
 def check_send_at():
     from qqbot.api import QQOpenAPI
     from qqbot.auth import TokenManager
@@ -234,6 +258,7 @@ def main() -> int:
     print(msg6)
     print(msg7)
     print(check_send_at())
+    print(check_verdict())
     print("smoke ok")
     return 0
 

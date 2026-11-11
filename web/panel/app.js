@@ -713,6 +713,11 @@ async function viewRules() {
           <label style="display:flex;gap:8px;align-items:center;font-size:13px">
             <input type="checkbox" id="vSearchOn" style="width:auto" onchange="saveVisionLite()"> 启用找图</label>
         </div>
+        <div class="mt12" style="border-top:1px solid var(--line);padding-top:10px">
+          <div class="hint" style="color:var(--muted);font-size:12px;margin-bottom:6px">
+            允许的类别（不勾选 = 全部放开，不建议；美女/恐怖/沙雕易触发平台审核）</div>
+          <div class="row" id="vCats" style="gap:12px"></div>
+        </div>
       </div>
       <div class="panel-b">
         <div class="row" style="justify-content:space-between">
@@ -802,6 +807,11 @@ async function loadVision() {
   $("#vOn").checked = !!d.enabled;
   $("#vChatOn").checked = !!d.chat_enabled;
   $("#vSearchOn").checked = !!d.image_search;
+  const RISKY = ["美女", "恐怖", "沙雕"];
+  $("#vCats").innerHTML = (d.all_categories || []).map(k => `
+    <label style="display:flex;gap:5px;align-items:center;font-size:12.5px;color:${RISKY.includes(k) ? "#f7dca0" : "inherit"}">
+      <input type="checkbox" class="vcat" value="${esc(k)}" style="width:auto" ${(d.categories || []).includes(k) ? "checked" : ""}>
+      ${esc(k)}${RISKY.includes(k) ? " ⚠" : ""}</label>`).join("");
   $("#vModel").value = d.model_custom ? d.model : "";
   $("#vModel").placeholder = d.model_custom ? "" : `留空跟随：${d.model || "-"}`;
   $("#vAction").value = d.action || "recall_mute";
@@ -821,7 +831,9 @@ async function saveVisionLite() {
 }
 
 async function saveVision() {
+  const cats = $$(".vcat:checked").map(x => x.value);
   const body = { enabled: $("#vOn").checked, chat_enabled: $("#vChatOn").checked,
+    categories: cats,
     model: $("#vModel").value.trim(),
     action: $("#vAction").value, minutes: parseInt($("#vMinutes").value || "10", 10),
     notice: $("#vNotice").value.trim(), prompt: $("#vPrompt").value.trim() };

@@ -191,7 +191,7 @@ class ChatEngine:
 
         # 找图意图优先，直接发图，不走模型
         if self.cfg.image_search_enabled:
-            query = imagepick.detect(question)
+            query = imagepick.detect(question, self.cfg.image_categories)
             if query:
                 self._send_found_image(group, member, message_id, query)
                 return

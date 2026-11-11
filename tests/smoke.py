@@ -250,6 +250,12 @@ def check_image_intent():
     assert imagepick.detect("今天天气不错") is None
     assert imagepick.detect("来张图片") is None            # 没类别不猜
     assert imagepick.detect("来张二次元" + "图" * 40) is None  # 太长当闲聊
+
+    safe = ["二次元", "搞笑", "风景"]
+    assert imagepick.detect("来张二次元图片", safe) == "二次元 动漫 壁纸"
+    assert imagepick.detect("来张美女图片", safe) is None      # 未放行
+    assert imagepick.detect("来张美女图片", []) == "美女 写真 唯美"  # 空=不限制
+    assert imagepick.detect("来张猫咪图", ["猫", "宠物"]) == "猫咪 可爱"  # 长类别优先
     return "找图意图识别通过"
 
 

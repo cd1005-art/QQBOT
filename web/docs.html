@@ -198,6 +198,7 @@ journalctl -u qqbot -f</pre>
   <h2 id="imgsearch">网络找图</h2>
   <p>群友说「来张二次元图片」时，从 360 图片接口取图并发送到群。URL 由平台转存，失败自动退回二进制上传。</p>
   <p><code>[image] search_enabled</code> 控制开关，<code>max_bytes</code> 默认 5MB（二进制直传上限）。</p>
+  <p><code>categories</code> 是类别白名单，默认只放行二次元、动漫、搞笑、风景、宠物、游戏；不填表示全部放开。</p>
   <div class="warn">图源是公开搜索，内容不受控。「美女」「恐怖」等类别有被平台判违规的风险，建议只保留二次元、搞笑、风景、宠物等安全类别。</div>
 
   <h2 id="at">回复时 @ 提问者</h2>

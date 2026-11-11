@@ -71,6 +71,8 @@ class Config:
     # 网络找图
     image_search_enabled: bool = False
     image_max_bytes: int = 5 * 1024 * 1024
+    image_categories: list[str] = field(
+        default_factory=lambda: ["二次元", "动漫", "搞笑", "风景", "宠物", "游戏"])
     ssh_host: str = ""
     ssh_port: int = 22
     ssh_user: str = "root"
@@ -158,6 +160,8 @@ def load(path: str | Path | None = None) -> Config:
         vision_max_tokens=int(vision.get("max_tokens", 800)),
         image_search_enabled=bool(image.get("search_enabled", False)),
         image_max_bytes=int(image.get("max_bytes", 5 * 1024 * 1024)),
+        image_categories=[str(x) for x in image.get(
+            "categories", ["二次元", "动漫", "搞笑", "风景", "宠物", "游戏"])],
         ssh_host=os.getenv("QQBOT_SSH_HOST") or str(srv.get("host", "")),
         ssh_port=int(srv.get("port", 22)),
         ssh_user=os.getenv("QQBOT_SSH_USER") or str(srv.get("user", "root")),

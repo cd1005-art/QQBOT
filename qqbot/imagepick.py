@@ -36,17 +36,22 @@ CATEGORIES: dict[str, str] = {
 VERBS = ("来张", "来一张", "找张", "找一张", "发张", "发一张", "整张", "给我一张", "来点", "找点")
 
 
-def detect(text: str) -> str | None:
-    """从群消息里识别「找图」意图，返回查询词；不是找图请求返回 None。"""
+def detect(text: str, allowed: list[str] | None = None) -> str | None:
+    """识别「找图」意图，返回查询词；不是找图请求或类别未放行则返回 None。
+
+    allowed 为空表示不限制（不推荐），否则只认白名单里的类别。
+    """
     t = (text or "").strip()
     if not t or len(t) > 40:
         return None
     has_verb = any(v in t for v in VERBS) or ("图片" in t) or ("照片" in t)
     if not has_verb:
         return None
-    for key, query in CATEGORIES.items():
+    pool = CATEGORIES if not allowed else {k: v for k, v in CATEGORIES.items() if k in allowed}
+    # 长的类别名优先，避免「猫」抢在「猫咪」前面
+    for key in sorted(pool, key=len, reverse=True):
         if key in t:
-            return query
+            return pool[key]
     return None
 
 

@@ -132,6 +132,7 @@ class Panel:
             "context_turns": c.llm_context_turns, "cooldown": c.llm_cooldown,
             "daily_limit": c.llm_daily_limit, "trigger": c.llm_trigger,
             "keywords": c.llm_keywords, "usage": self.store.chat_usage_today(),
+            "reply_at_user": c.reply_at_user,
         }
 
     def save_llm(self, body: dict) -> dict:

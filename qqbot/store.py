@@ -103,6 +103,8 @@ CREATE TABLE IF NOT EXISTS chat_history (
     member_openid TEXT,
     role          TEXT NOT NULL,
     content       TEXT NOT NULL,
+    model         TEXT,
+    kind          TEXT,
     created_at    INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_chat_group ON chat_history(group_openid, id DESC);
@@ -140,6 +142,11 @@ class Store:
             cols = [r["name"] for r in conn.execute("PRAGMA table_info(groups)").fetchall()]
             if "title" not in cols:
                 conn.execute("ALTER TABLE groups ADD COLUMN title TEXT")
+            ccols = [r["name"] for r in conn.execute("PRAGMA table_info(chat_history)").fetchall()]
+            if "model" not in ccols:
+                conn.execute("ALTER TABLE chat_history ADD COLUMN model TEXT")
+            if "kind" not in ccols:
+                conn.execute("ALTER TABLE chat_history ADD COLUMN kind TEXT")
 
     @contextmanager
     def _conn(self):
@@ -366,11 +373,13 @@ class Store:
 
     # ---------------- 对话 ----------------
 
-    def add_chat(self, group_openid: str, member_openid: str | None, role: str, content: str):
+    def add_chat(self, group_openid: str, member_openid: str | None, role: str, content: str,
+                 model: str | None = None, kind: str | None = None):
         with self._conn() as conn:
             conn.execute(
-                "INSERT INTO chat_history(group_openid, member_openid, role, content, created_at) "
-                "VALUES(?,?,?,?,?)", (group_openid, member_openid, role, content, int(time.time())))
+                "INSERT INTO chat_history(group_openid, member_openid, role, content, model, kind, created_at) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (group_openid, member_openid, role, content, model, kind, int(time.time())))
 
     def chat_context(self, group_openid: str, turns: int = 6) -> list[sqlite3.Row]:
         with self._conn() as conn:
@@ -382,7 +391,9 @@ class Store:
     def recent_chats(self, limit: int = 40) -> list[sqlite3.Row]:
         with self._conn() as conn:
             return conn.execute(
-                "SELECT * FROM chat_history ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+                "SELECT h.*, g.title AS group_title FROM chat_history h "
+                "LEFT JOIN groups g ON g.group_openid = h.group_openid "
+                "ORDER BY h.id DESC LIMIT ?", (limit,)).fetchall()
 
     def bump_chat_usage(self, group_openid: str, tokens: int = 0) -> int:
         day = time.strftime("%Y-%m-%d")

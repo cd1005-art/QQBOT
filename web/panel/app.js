@@ -605,13 +605,21 @@ async function loadChats() {
   const j = await api("/panel/api/chat?limit=40");
   const rows = j.ok ? j.data : [];
   if (!rows.length) { $("#chatBox").innerHTML = empty("还没有对话记录", "在群里 @机器人 说句话试试"); return; }
-  $("#chatBox").innerHTML = `<table><thead><tr><th style="width:96px">时间</th>
-    <th style="width:64px">角色</th><th>内容</th><th style="width:110px">成员</th></tr></thead><tbody>
+  const KIND = { chat: "对话", imagegen: "生图", search: "找图" };
+  $("#chatBox").innerHTML = `<table><thead><tr><th style="width:92px">时间</th>
+    <th style="width:58px">角色</th><th>内容</th><th style="width:190px">模型 / 来源</th>
+    <th style="width:110px">群</th></tr></thead><tbody>
     ${rows.map(r => `<tr>
       <td style="color:var(--muted)">${ts(r.created_at)}</td>
       <td>${r.role === "user" ? '<span class="badge">群友</span>' : '<span class="badge ok">机器人</span>'}</td>
       <td style="white-space:pre-wrap">${esc(r.content)}</td>
-      <td class="mono" style="color:var(--muted)">${esc((r.member_openid || "-").slice(0, 10))}…</td>
+      <td style="font-size:12px">
+        ${r.model
+          ? `<span class="badge ${r.kind === "chat" ? "info" : ""}" style="font-size:11px">${esc(KIND[r.kind] || "对话")}</span>
+             <span class="mono" style="color:var(--muted)">${esc(r.model)}</span>`
+          : '<span style="color:var(--muted)">—</span>'}
+      </td>
+      <td style="color:var(--muted);font-size:12px">${esc(r.group_title || (r.group_openid || "").slice(0, 8) + "…")}</td>
     </tr>`).join("")}</tbody></table>`;
 }
 

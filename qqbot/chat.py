@@ -122,7 +122,8 @@ class ChatEngine:
 
     # ---------------- 主循环 ----------------
 
-    def _generate_image(self, group: str, member: str, message_id: str, prompt: str):
+    def _generate_image(self, group: str, member: str, message_id: str, prompt: str,
+                        question_for_log: str = ""):
         from .imagegen import ImageGenClient, GenError
 
         cfg = self.cfg
@@ -157,11 +158,16 @@ class ChatEngine:
             return
 
         self._last_reply[group] = time.time()
+        model = cfg.imagegen_model or "生图模型"
+        self.store.add_chat(group, member, "user", question_for_log, model, "imagegen")
+        self.store.add_chat(group, member, "assistant",
+                            f"[图片] {prompt}", model, "imagegen")
         self.store.log_action("imagegen", group, member, prompt[:60], True,
                               f"HTTP {st} {kind} {len(blob or b'')}B")
         print(f"[gen] 已生成并发送 群={group[:8]}… {prompt[:30]}", flush=True)
 
-    def _send_found_image(self, group: str, member: str, message_id: str, query: str):
+    def _send_found_image(self, group: str, member: str, message_id: str, query: str,
+                          question_for_log: str = ""):
         cand = imagepick.pick(query, self.cfg.image_max_bytes)
         if not cand:
             try:
@@ -201,6 +207,10 @@ class ChatEngine:
                 return
 
         self._last_reply[group] = time.time()
+        self.store.add_chat(group, member, "user", question_for_log or query, "图源搜索", "search")
+        self.store.add_chat(group, member, "assistant",
+                            f"[图片] {query}（{cand.get('width')}×{cand.get('height')}）",
+                            "图源搜索", "search")
         self.store.log_action("image", group, member, query, True,
                               f"HTTP {st} {cand.get('width')}x{cand.get('height')} {cand.get('bytes')}B")
         print(f"[chat] 已发图 群={group[:8]}… {query} {cand.get('bytes')}B", flush=True)
@@ -240,7 +250,7 @@ class ChatEngine:
         if self.cfg.imagegen_enabled:
             prompt = imagegen.detect(question)
             if prompt:
-                self._generate_image(group, member, message_id, prompt)
+                self._generate_image(group, member, message_id, prompt, question)
                 return
 
         # 2) 找图意图，直接发图，不走模型
@@ -257,7 +267,7 @@ class ChatEngine:
                                       f"类别未放行: {info['key']}")
                 return
             if info:
-                self._send_found_image(group, member, message_id, info["query"])
+                self._send_found_image(group, member, message_id, info["query"], question)
                 return
             # 说了要图但没指定类别 → 从已启用类别里随机
             if imagepick.intent(question):
@@ -270,7 +280,7 @@ class ChatEngine:
                     return
                 pick = imagepick.random_choice(self.cfg.image_categories)
                 if pick:
-                    self._send_found_image(group, member, message_id, pick["query"])
+                    self._send_found_image(group, member, message_id, pick["query"], question)
                     return
         # 日限额
         if self.store.chat_calls_today(group) >= self.cfg.llm_daily_limit:
@@ -342,8 +352,8 @@ class ChatEngine:
 
         self._last_reply[group] = time.time()
         calls = self.store.bump_chat_usage(group, tokens)
-        self.store.add_chat(group, member, "user", question)
-        self.store.add_chat(group, member, "assistant", answer)
+        self.store.add_chat(group, member, "user", question, self.cfg.llm_model, "chat")
+        self.store.add_chat(group, member, "assistant", answer, self.cfg.llm_model, "chat")
         self.store.log_action("chat", group, member, question[:120], True,
                               f"HTTP {st} tokens={tokens} today={calls}")
         print(f"[chat] 已回复 群={group[:8]}… tokens={tokens} 第 {calls} 次", flush=True)

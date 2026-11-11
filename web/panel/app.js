@@ -184,10 +184,10 @@ async function viewDashboard() {
     </div>`;
 }
 
-function who(nick, openid) {
+function who(nick, openid, fallback = "未知") {
   const o = openid || "";
   if (!o) return "—";
-  const name = (nick || "").trim() || "未知";
+  const name = (nick || "").trim() || fallback;
   const short = o.length > 6 ? o.slice(-6) : o;
   return `<span title="${esc(o)}" class="who" data-openid="${esc(o)}"
     style="cursor:copy" onclick="copyText(this.dataset.openid)">${esc(name)}
@@ -632,7 +632,7 @@ async function loadChats() {
     ${rows.map(r => `<tr>
       <td style="color:var(--muted)">${ts(r.created_at)}</td>
       <td>${r.role === "user"
-        ? `<span class="badge">${r.scene === "c2c" ? "私聊" : "群友"}</span><div style="margin-top:5px">${who(r.member_nickname, r.member_openid)}</div>`
+        ? `<span class="badge">${r.scene === "c2c" ? "私聊" : "群友"}</span><div style="margin-top:5px">${who(r.member_nickname, r.member_openid, r.scene === "c2c" ? "用户" : "未知")}</div>`
         : `<span class="badge ok">机器人</span>${r.scene === "c2c" ? '<div style="margin-top:5px;color:var(--muted);font-size:11.5px">私聊</div>' : ""}`}</td>
       <td style="white-space:pre-wrap">${esc(r.content)}</td>
       <td style="font-size:12px">

@@ -149,6 +149,29 @@ class QQOpenAPI:
             "file_type": 1, "file_name": file_name,
             "file_data": base64.b64encode(blob).decode(), "srv_send_msg": False})
 
+    def send_c2c_image(self, user_openid: str, image_url: str,
+                       msg_id: str | None = None, msg_seq: int = 1):
+        """私聊发图：先上传富媒体，再发 msg_type=7。"""
+        st, data = self.request("POST", f"/v2/users/{user_openid}/files", {
+            "file_type": 1, "url": image_url, "srv_send_msg": False})
+        info = (data or {}).get("file_info")
+        if not info:
+            raise ApiError(st, None, "私聊上传未返回 file_info", str(data)[:200])
+        return self.send_c2c_media(user_openid, info, msg_id, msg_seq)
+
+    def send_c2c_media(self, user_openid: str, file_info: str,
+                       msg_id: str | None = None, msg_seq: int = 1):
+        body: dict = {"msg_type": 7, "media": {"file_info": file_info}, "msg_seq": msg_seq}
+        if msg_id:
+            body["msg_id"] = msg_id
+        return self.request("POST", f"/v2/users/{user_openid}/messages", body)
+
+    def upload_c2c_image(self, user_openid: str, blob: bytes, file_name: str = "image.png"):
+        import base64
+        return self.request("POST", f"/v2/users/{user_openid}/files", {
+            "file_type": 1, "file_name": file_name,
+            "file_data": base64.b64encode(blob).decode(), "srv_send_msg": False})
+
     def send_c2c(self, user_openid: str, content: str,
                  msg_id: str | None = None, msg_seq: int = 1):
         """私聊（C2C）文本回复，接口与群聊不同：/v2/users/{openid}/messages。"""

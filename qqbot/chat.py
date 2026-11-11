@@ -136,7 +136,7 @@ class ChatEngine:
     # ---------------- 主循环 ----------------
 
     def _generate_image(self, group: str, member: str, message_id: str, prompt: str,
-                        question_for_log: str = "", size: str = ""):
+                        question_for_log: str = "", size: str = "", scene: str = "group"):
         from .imagegen import ImageGenClient, GenError
 
         cfg = self.cfg
@@ -157,15 +157,20 @@ class ChatEngine:
 
         try:
             if url:
-                st, _ = self.api.send_image(group, url, msg_id=message_id)
+                st, _ = (self.api.send_c2c_image(group, url, msg_id=message_id)
+                         if scene == "c2c" else self.api.send_image(group, url, msg_id=message_id))
             else:
-                up_st, up = self.api.upload_image_bytes(group, blob or b"", "gen.png")
+                up_st, up = ((self.api.upload_c2c_image(group, blob or b"", "gen.png"))
+                             if scene == "c2c" else
+                             (self.api.upload_image_bytes(group, blob or b"", "gen.png")))
                 info = (up or {}).get("file_info")
                 if not info:
                     raise ApiError(up_st, None, "上传无 file_info")
-                st, _ = self.api.request("POST", f"/v2/groups/{group}/messages", {
-                    "msg_type": 7, "media": {"file_info": info},
-                    "msg_id": message_id, "msg_seq": 1})
+                st, _ = (self.api.send_c2c_media(group, info, message_id)
+                         if scene == "c2c" else
+                         self.api.request("POST", f"/v2/groups/{group}/messages", {
+                             "msg_type": 7, "media": {"file_info": info},
+                             "msg_id": message_id, "msg_seq": 1}))
         except ApiError as exc:
             print(f"[gen] 发送失败: {exc.code} {exc.message}", flush=True)
             self.store.log_action("imagegen", group, member, prompt[:60], False, f"send {exc.code}")
@@ -173,15 +178,15 @@ class ChatEngine:
 
         self._last_reply[group] = time.time()
         model = cfg.imagegen_model or "生图模型"
-        self.store.add_chat(group, member, "user", question_for_log, model, "imagegen")
+        self.store.add_chat(group, member, "user", question_for_log, model, "imagegen", scene)
         self.store.add_chat(group, member, "assistant",
-                            f"[图片] {prompt}", model, "imagegen")
+                            f"[图片] {prompt}", model, "imagegen", scene)
         self.store.log_action("imagegen", group, member, prompt[:60], True,
                               f"HTTP {st} {kind} {use_size} {len(blob or b'')}B")
         print(f"[gen] 已生成并发送 群={group[:8]}… {prompt[:30]}", flush=True)
 
     def _send_found_image(self, group: str, member: str, message_id: str, query: str,
-                          question_for_log: str = ""):
+                          question_for_log: str = "", scene: str = "group"):
         cand = imagepick.pick(query, self.cfg.image_max_bytes)
         if not cand:
             try:
@@ -194,20 +199,26 @@ class ChatEngine:
         st = None
         first_err = ""
         try:
-            st, _ = self.api.send_image(group, cand["url"], msg_id=message_id)
+            st, _ = (self.api.send_c2c_image(group, cand["url"], msg_id=message_id)
+                     if scene == "c2c" else
+                     self.api.send_image(group, cand["url"], msg_id=message_id))
         except ApiError as exc:
             first_err = f"{exc.code} {exc.message}"
             # URL 转存失败（850026 等）时，退回二进制上传
             try:
                 blob, mime = fetch_image(cand["url"], self.cfg.image_max_bytes)
                 ext = "png" if "png" in mime else "jpg"
-                up_st, up = self.api.upload_image_bytes(group, blob, f"image.{ext}")
+                up_st, up = ((self.api.upload_c2c_image(group, blob, f"image.{ext}"))
+                             if scene == "c2c" else
+                             (self.api.upload_image_bytes(group, blob, f"image.{ext}")))
                 info = (up or {}).get("file_info")
                 if not info:
                     raise ApiError(up_st, None, "二进制上传无 file_info")
-                st, _ = self.api.request("POST", f"/v2/groups/{group}/messages", {
-                    "msg_type": 7, "media": {"file_info": info},
-                    "msg_id": message_id, "msg_seq": 1})
+                st, _ = (self.api.send_c2c_media(group, info, message_id)
+                         if scene == "c2c" else
+                         self.api.request("POST", f"/v2/groups/{group}/messages", {
+                             "msg_type": 7, "media": {"file_info": info},
+                             "msg_id": message_id, "msg_seq": 1}))
                 print(f"[chat] 转存失败({exc.code})，已改用二进制上传", flush=True)
             except Exception as exc2:
                 print(f"[chat] 发图失败: 转存={first_err} / 回退={exc2}", flush=True)
@@ -221,10 +232,11 @@ class ChatEngine:
                 return
 
         self._last_reply[group] = time.time()
-        self.store.add_chat(group, member, "user", question_for_log or query, "图源搜索", "search")
+        self.store.add_chat(group, member, "user", question_for_log or query,
+                            "图源搜索", "search", scene)
         self.store.add_chat(group, member, "assistant",
                             f"[图片] {query}（{cand.get('width')}×{cand.get('height')}）",
-                            "图源搜索", "search")
+                            "图源搜索", "search", scene)
         self.store.log_action("image", group, member, query, True,
                               f"HTTP {st} {cand.get('width')}x{cand.get('height')} {cand.get('bytes')}B")
         print(f"[chat] 已发图 群={group[:8]}… {query} {cand.get('bytes')}B", flush=True)
@@ -245,6 +257,8 @@ class ChatEngine:
             return
         group = conv or data.get("group_openid") or ""
         message_id = data["id"]
+        if scene == "c2c" and not member:
+            member = conv   # 私聊没有 member_openid，用 user_openid 当标识
         member = (data.get("author") or {}).get("member_openid") or ""
         question = data["_clean"]
 
@@ -260,16 +274,16 @@ class ChatEngine:
         if now - self._last_reply.get(group, 0) < self.cfg.llm_cooldown:
             return
 
-        # 1) 文生图：说了「画一张…」就走生成，不走对话模型（仅群聊）
-        if scene == "group" and self.cfg.imagegen_enabled:
+        # 1) 文生图：说了「画一张…」就走生成，不走对话模型（群聊/私聊都支持）
+        if self.cfg.imagegen_enabled:
             prompt = imagegen.detect(question)
             if prompt:
                 self._generate_image(group, member, message_id, prompt, question,
-                                     imagegen.parse_size(question, cfg.imagegen_size))
+                                     imagegen.parse_size(question, cfg.imagegen_size), scene)
                 return
 
-        # 2) 找图意图，直接发图，不走模型（仅群聊）
-        if scene == "group" and self.cfg.image_search_enabled:
+        # 2) 找图意图，直接发图，不走模型（群聊/私聊都支持）
+        if self.cfg.image_search_enabled:
             info = imagepick.classify(question, self.cfg.image_categories)
             if info and not info["allowed"]:
                 enabled = "、".join(self.cfg.image_categories) or "（未启用任何类别）"
@@ -282,7 +296,7 @@ class ChatEngine:
                                       f"类别未放行: {info['key']}")
                 return
             if info:
-                self._send_found_image(group, member, message_id, info["query"], question)
+                self._send_found_image(group, member, message_id, info["query"], question, scene)
                 return
             # 说了要图但没指定类别 → 从已启用类别里随机
             if imagepick.intent(question):
@@ -295,7 +309,7 @@ class ChatEngine:
                     return
                 pick = imagepick.random_choice(self.cfg.image_categories)
                 if pick:
-                    self._send_found_image(group, member, message_id, pick["query"], question)
+                    self._send_found_image(group, member, message_id, pick["query"], question, scene)
                     return
         # 日限额
         if self.store.chat_calls_today(group) >= self.cfg.llm_daily_limit:

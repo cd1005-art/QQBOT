@@ -172,9 +172,11 @@ class ChatEngine:
             return
 
         st = None
+        first_err = ""
         try:
             st, _ = self.api.send_image(group, cand["url"], msg_id=message_id)
         except ApiError as exc:
+            first_err = f"{exc.code} {exc.message}"
             # URL 转存失败（850026 等）时，退回二进制上传
             try:
                 blob, mime = fetch_image(cand["url"], self.cfg.image_max_bytes)
@@ -187,9 +189,15 @@ class ChatEngine:
                     "msg_type": 7, "media": {"file_info": info},
                     "msg_id": message_id, "msg_seq": 1})
                 print(f"[chat] 转存失败({exc.code})，已改用二进制上传", flush=True)
-            except (ApiError, Exception) as exc2:
-                print(f"[chat] 发图失败: {exc2}", flush=True)
-                self.store.log_action("image", group, member, query, False, str(exc2)[:120])
+            except Exception as exc2:
+                print(f"[chat] 发图失败: 转存={first_err} / 回退={exc2}", flush=True)
+                self.store.log_action("image", group, member, query, False,
+                                      f"{first_err} | {exc2}"[:150])
+                try:
+                    self.api.send_message(group, "这张图没能发出去，换一句再试试。",
+                                          msg_id=message_id)
+                except ApiError:
+                    pass
                 return
 
         self._last_reply[group] = time.time()

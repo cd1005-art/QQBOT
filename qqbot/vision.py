@@ -23,7 +23,12 @@ def fetch_image(url: str, max_bytes: int = 8 * 1024 * 1024, timeout: int = 20) -
     hit = _CACHE.get(key)
     if hit and time.time() - hit[0] < _CACHE_TTL:
         return hit[1], hit[2]
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    req = urllib.request.Request(url, headers={
+        "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                       "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"),
+        "Referer": "https://image.so.com/",   # 图床防盗链，缺这个会 403
+        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+    })
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         data = resp.read(max_bytes + 1)
         mime = (resp.headers.get("Content-Type") or "image/jpeg").split(";")[0]

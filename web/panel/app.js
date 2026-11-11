@@ -657,22 +657,12 @@ async function viewSettings() {
       </div>
     </div></div>
 
-    <div class="panel"><div class="panel-h">开源项目<span class="sp"></span>
-      <span class="hint">软提示与 Star 门槛互斥，门槛开时不再弹</span></div><div class="panel-b">
-      <div class="row" style="justify-content:space-between;align-items:flex-start">
-        <div>
-          <b style="font-size:13px">${esc(d.repo || "-")}</b>
-          <div class="hint" style="color:var(--muted);font-size:12px">
-            弹窗提示：${d.soft_prompt ? "开启" : "关闭"}
-            · 间隔：${d.soft_interval_hours ? d.soft_interval_hours + " 小时" : "仅一次"}
-            · 硬门槛：${d.require_star ? "开启（校验 " + esc(d.star_user || "未配置") + "）" : "关闭"}</div>
-        </div>
+    <div class="panel"><div class="panel-h">开源项目</div><div class="panel-b">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <b style="font-size:13px">${esc(d.repo || "-")}</b>
         <a class="btn" style="text-decoration:none" target="_blank" rel="noopener"
            href="https://github.com/${esc(d.repo || "cd1005-art/QQBOT")}">打开仓库</a>
       </div>
-      <div class="hint mt12" style="color:var(--muted);font-size:12px;border-top:1px solid var(--line);padding-top:10px">
-        改配置：<code class="mono">[about] soft_prompt / soft_interval_hours / require_star</code>，
-        改完重启服务生效。</div>
     </div></div>
 
     <div class="panel"><div class="panel-h">修改面板密码</div><div class="panel-b">

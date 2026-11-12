@@ -109,6 +109,14 @@ size = "1024x1024"
 # 给提示词加固定前缀，例如「动漫风格，高清」
 prefix = ""
 
+[storage]
+# 图片归档：审核/识别/生图/找图的图片上传到图床，发送时用图床直链
+# 默认开启；未配置 token 或 base_url 时自动不生效
+enabled = true
+base_url = "https://img.oddpp.com/api/v1"
+token = ""
+timeout = 30
+
 [message]
 # 官方标签，纯文本 "@全体成员" 只会显示灰字、不触发提醒
 at_all_template = "<qqbot-at-everyone />"

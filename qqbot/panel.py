@@ -195,6 +195,25 @@ class Panel:
         ])
         return {"answer": answer, "tokens": tokens, "model": self.cfg.llm_model}
 
+    # ---------------- 图片归档 ----------------
+
+    def storage_settings(self) -> dict:
+        c = self.cfg
+        st = self.store.image_stats()
+        st["enabled"] = c.storage_enabled
+        st["base_url"] = c.storage_base_url
+        st["has_token"] = bool(c.storage_token)
+        st["recent"] = [dict(r) for r in self.store.recent_images(8)]
+        return st
+
+    def save_storage(self, body: dict) -> dict:
+        c = self.cfg
+        if "enabled" in body:
+            c.storage_enabled = bool(body["enabled"])
+            cfgedit.patch_many(c.source_path, "storage", {"enabled": c.storage_enabled})
+            self.store.log_action("storage", None, None, json.dumps(body), True, "saved")
+        return self.storage_settings()
+
     # ---------------- 文生图 ----------------
 
     def imagegen_settings(self) -> dict:
@@ -757,6 +776,8 @@ class _Handler(BaseHTTPRequestHandler):
             elif path.startswith("/panel/api/groups/") and path.endswith("/stats"):
                 g = path.split("/")[4]
                 self._json({"ok": True, "data": p.group_detail(g)})
+            elif path == "/panel/api/storage":
+                self._json({"ok": True, "data": p.storage_settings()})
             elif path == "/panel/api/imagegen":
                 self._json({"ok": True, "data": p.imagegen_settings()})
             elif path == "/panel/api/vision":
@@ -830,6 +851,10 @@ class _Handler(BaseHTTPRequestHandler):
 
         if not self._authed():
             self._json({"ok": False, "error": "unauthorized"}, 401)
+            return
+
+        if path == "/panel/api/storage":
+            self._json({"ok": True, "data": p.save_storage(self._body())})
             return
 
         if path == "/panel/api/imagegen":

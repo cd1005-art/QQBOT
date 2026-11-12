@@ -19,6 +19,7 @@ import urllib.request
 from .api import ApiError, QQOpenAPI
 from .config import Config
 from .store import Store
+from .imagesink import from_config as sink_from_config
 from .vision import VisionClient, VisionError, fetch_image, parse_verdict
 
 DEFAULT_PROMPT = (
@@ -38,6 +39,7 @@ class VisionEngine:
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="vision", daemon=True)
         self._seen: dict[str, float] = {}
+        self.sink = sink_from_config(cfg)
 
     def start(self):
         self._thread.start()
@@ -89,6 +91,12 @@ class VisionEngine:
         except (urllib.error.URLError, ValueError, TimeoutError) as exc:
             print(f"[vision] 下载失败: {exc}", flush=True)
             return
+
+        # 归档：审核过的图也进图床，便于事后追溯
+        if self.sink.ok:
+            self.sink.archive(self.store, image, source="moderation",
+                              group=group, member=member, mime=mime,
+                              filename=att.get("filename") or "")
 
         client = VisionClient(
             self.cfg.vision_base_url or self.cfg.llm_base_url,

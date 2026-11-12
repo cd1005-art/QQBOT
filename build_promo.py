@@ -17,7 +17,8 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parent
-OUT = ROOT / "promo"
+OUT = ROOT / "promo" / "01-成片"
+ASSETS = ROOT / "promo" / "03-素材" / "截图"
 W, H = 1920, 1080
 
 BG = (14, 17, 22)
@@ -198,7 +199,7 @@ def build(voice_ok: bool, total: float):
     durs = [d * scale for d in durs]
 
     for i, (title, sub, shot, bullets) in enumerate(SCENES):
-        img = slide(title, sub, ROOT / "promo" / shot, bullets, i, SCRIPT[i][0])
+        img = slide(title, sub, ASSETS / Path(shot).name, bullets, i, SCRIPT[i][0])
         png = OUT / f"slide{i}.png"
         img.save(png)
         mp4 = OUT / f"clip{i}.mp4"

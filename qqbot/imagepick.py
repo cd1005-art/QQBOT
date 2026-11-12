@@ -139,6 +139,7 @@ def pick(query: str, max_bytes: int = 5 * 1024 * 1024) -> dict | None:
                 continue
             cand["bytes"] = len(blob)
             cand["mime"] = ctype
+            cand["blob"] = blob
             return cand
         except Exception:
             continue

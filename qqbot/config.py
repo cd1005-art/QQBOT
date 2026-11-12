@@ -77,6 +77,11 @@ class Config:
     github_token: str = ""
     soft_prompt: bool = True
     soft_interval_hours: int = 24
+    # 图片归档（图床）
+    storage_enabled: bool = True
+    storage_base_url: str = "https://img.oddpp.com/api/v1"
+    storage_token: str = ""
+    storage_timeout: int = 30
     # 文生图（与对话模型是两套接口，可共存）
     imagegen_enabled: bool = False
     imagegen_base_url: str = ""
@@ -119,6 +124,7 @@ def load(path: str | Path | None = None) -> Config:
     vision = raw.get("vision", {})
     image = raw.get("image", {})
     imagegen = raw.get("imagegen", {})
+    storage = raw.get("storage", {})
     about = raw.get("about", {})
 
     app_id = os.getenv("QQBOT_APP_ID") or bot.get("app_id", "")
@@ -183,6 +189,10 @@ def load(path: str | Path | None = None) -> Config:
         github_token=str(about.get("github_token", "")).strip(),
         soft_prompt=bool(about.get("soft_prompt", True)),
         soft_interval_hours=int(about.get("soft_interval_hours", 24)),
+        storage_enabled=bool(storage.get("enabled", True)),
+        storage_base_url=str(storage.get("base_url", "https://img.oddpp.com/api/v1")),
+        storage_token=str(storage.get("token", "")),
+        storage_timeout=int(storage.get("timeout", 30)),
         imagegen_enabled=bool(imagegen.get("enabled", False)),
         imagegen_base_url=str(imagegen.get("base_url", "")),
         imagegen_api_key=str(imagegen.get("api_key", "")),

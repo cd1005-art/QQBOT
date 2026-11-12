@@ -116,6 +116,22 @@ CREATE TABLE IF NOT EXISTS chat_usage (
     tokens       INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (day, group_openid)
 );
+CREATE TABLE IF NOT EXISTS image_archive (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    sha256        TEXT UNIQUE,
+    url           TEXT NOT NULL,
+    size          INTEGER,
+    width         INTEGER,
+    height        INTEGER,
+    source        TEXT,
+    group_openid  TEXT,
+    member_openid TEXT,
+    bed_id        TEXT,
+    reused        INTEGER DEFAULT 0,
+    created_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_image_created ON image_archive(created_at);
+
 CREATE TABLE IF NOT EXISTS kv (
     key   TEXT PRIMARY KEY,
     value TEXT,
@@ -444,6 +460,42 @@ class Store:
                 "SELECT COALESCE(SUM(calls),0) AS c, COALESCE(SUM(tokens),0) AS t "
                 "FROM chat_usage WHERE day=?", (day,)).fetchone()
         return {"calls": int(row["c"]), "tokens": int(row["t"])}
+
+    # ---------------- 图片归档 ----------------
+
+    def find_image_by_sha(self, sha: str):
+        with self._conn() as conn:
+            return conn.execute(
+                "SELECT url, size FROM image_archive WHERE sha256=?", (sha,)).fetchone()
+
+    def add_image(self, sha: str, url: str, size: int, w: int, h: int,
+                  source: str, group: str = "", member: str = "",
+                  bed_id: str = "", reused: int = 0):
+        with self._conn() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO image_archive"
+                "(sha256,url,size,width,height,source,group_openid,member_openid,bed_id,reused,created_at)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                (sha, url, size, w, h, source, group, member, bed_id, reused,
+                 int(time.time())))
+
+    def image_stats(self) -> dict:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) AS n, COALESCE(SUM(size),0) AS total, "
+                "MAX(created_at) AS last_at FROM image_archive").fetchone()
+            last = conn.execute(
+                "SELECT url, source FROM image_archive ORDER BY id DESC LIMIT 1").fetchone()
+        return {"count": row["n"], "bytes": row["total"],
+                "last_at": row["last_at"] or 0,
+                "last_url": last["url"] if last else "",
+                "last_source": last["source"] if last else ""}
+
+    def recent_images(self, limit: int = 20) -> list:
+        with self._conn() as conn:
+            return conn.execute(
+                "SELECT id, url, size, source, group_openid, member_openid, created_at "
+                "FROM image_archive ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
 
     # ---------------- KV ----------------
 

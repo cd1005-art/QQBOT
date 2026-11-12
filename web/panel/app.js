@@ -870,6 +870,7 @@ async function viewRules() {
             允许的类别（<b style="color:#f7dca0">必须勾选才生效</b>；一个都不勾 = 全部禁止。美女/恐怖/沙雕易触发平台审核）</div>
           <div class="row" id="vCats" style="gap:12px"></div>
         </div>
+        <div class="row" id="sinkRow" style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px"></div>
       </div>
       <div class="panel-b">
         <div class="row" style="justify-content:space-between">
@@ -975,6 +976,32 @@ async function loadVision() {
   $("#vPrompt").value = d.prompt || "";
   $("#vStat").textContent = `近 200 次操作中：识别 ${(d.usage || {}).checked || 0} 次，拦截 ${(d.usage || {}).blocked || 0} 次`;
   loadVisionResults();
+  loadStorage();
+}
+
+async function loadStorage() {
+  const j = await api("/panel/api/storage");
+  if (!j.ok) return;
+  const d = j.data;
+  const mb = (d.bytes / 1024 / 1024).toFixed(2);
+  $("#sinkRow").innerHTML = `
+    <div style="flex:1">
+      <b style="font-size:12.5px">图片归档</b>
+      <span style="font-size:12px;color:var(--muted);margin-left:8px">
+        ${d.has_token
+          ? `已上传 ${d.count} 张 · ${mb} MB${d.last_at ? " · 最近 " + ago(d.last_at) : ""}`
+          : "未配置 token，未启用"}
+      </span>
+    </div>
+    <button class="btn sm ${d.enabled ? "pri" : ""}" onclick="toggleStorage(${d.enabled})">
+      ${d.enabled ? "已开启" : "已关闭"}</button>`;
+}
+
+async function toggleStorage(current) {
+  const j = await api("/panel/api/storage", { method: "POST",
+    body: JSON.stringify({ enabled: !current }) });
+  if (j.ok) { toast(`图片归档已${!current ? "开启" : "关闭"}`, "ok"); loadStorage(); }
+  else toast(j.error || "操作失败", "bad");
 }
 
 async function saveVisionLite() {

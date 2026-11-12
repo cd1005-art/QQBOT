@@ -63,6 +63,7 @@ th{color:var(--muted);font-weight:500}
   <a href="#schedules">定时任务</a>
   <a href="#chat">对话（大模型）</a>
   <a href="#vision">图片识别与审核</a>
+  <a href="#storage">图片归档</a>
   <a href="#imagegen">文生图</a>
   <a href="#imgsearch">网络找图</a>
   <a href="#at">回复 @ 提问者</a>
@@ -195,6 +196,16 @@ journalctl -u qqbot -f</pre>
     <tr><td><code>notice</code></td><td>违规后是否在群里补一句提示</td></tr>
   </table>
   <div class="tip">模型输出要求纯 JSON；解析失败按「不违规」处理，避免误伤。建议先用 <code>none</code> 观察几天再切到处置。</div>
+
+  <h2 id="storage">图片归档</h2>
+  <p>审核、识别、生图、找图的图片统一上传到图床，发送时使用图床直链。协议为 Lsky Pro 兼容：<code>POST /upload</code> + <code>X-API-TOKEN</code>。</p>
+  <table>
+    <tr><th>配置</th><th>说明</th></tr>
+    <tr><td><code>enabled</code></td><td>默认 true；未配 token 或 base_url 时自动不生效</td></tr>
+    <tr><td><code>base_url</code></td><td>图床 API 根地址，如 <code>https://img.oddpp.com/api/v1</code></td></tr>
+    <tr><td><code>token</code></td><td>图床生成的 API Token</td></tr>
+  </table>
+  <div class="tip">同一张图按 sha256 只上传一次；发送走图床直链可显著降低腾讯侧转存失败率。</div>
 
   <h2 id="imagegen">文生图</h2>
   <p>与对话模型是两套接口，可共存。群里说「画一张…」时走 <code>/images/generations</code>，不经过对话模型。</p>

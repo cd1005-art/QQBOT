@@ -25,6 +25,7 @@ from .config import Config
 from .llm import LLMClient, LLMError
 from .vision import fetch_image, image_block
 from . import imagegen, imagepick
+from .imagesink import from_config as sink_from_config
 from .store import Store
 
 AT_TAG = re.compile(r"<@!?[0-9A-Za-z_\-]+>")
@@ -41,6 +42,7 @@ class ChatEngine:
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="chat", daemon=True)
         self._last_reply: dict[str, float] = {}
+        self.sink = sink_from_config(cfg)
         self._seen: dict[str, float] = {}
 
     def start(self):
@@ -155,10 +157,23 @@ class ChatEngine:
                 pass
             return
 
+        # 归档：把生成的图传图床，发送时用图床直链（平台转存成功率更高）
+        send_url = url
+        if self.sink.ok:
+            try:
+                blob2, mime2 = (fetch_image(url, self.cfg.image_max_bytes) if url
+                                else (blob or b"", "image/png"))
+                ref = self.sink.archive(self.store, blob2, source="imagegen",
+                                        group=group, member=member, mime=mime2)
+                if ref:
+                    send_url, blob = ref, None
+            except Exception as exc:
+                print(f"[sink] 生图归档失败: {exc}", flush=True)
+
         try:
-            if url:
-                st, _ = (self.api.send_c2c_image(group, url, msg_id=message_id)
-                         if scene == "c2c" else self.api.send_image(group, url, msg_id=message_id))
+            if send_url:
+                st, _ = (self.api.send_c2c_image(group, send_url, msg_id=message_id)
+                         if scene == "c2c" else self.api.send_image(group, send_url, msg_id=message_id))
             else:
                 up_st, up = ((self.api.upload_c2c_image(group, blob or b"", "gen.png"))
                              if scene == "c2c" else
@@ -195,6 +210,20 @@ class ChatEngine:
                 pass
             self.store.log_action("image", group, member, query, False, "未找到可用图片")
             return
+
+        # 归档：图源站常有防盗链，转存到图床后再发，成功率更高
+        if self.sink.ok:
+            try:
+                blob0 = cand.get("blob")
+                mime0 = cand.get("mime") or "image/jpeg"
+                if not blob0:
+                    blob0, mime0 = fetch_image(cand["url"], self.cfg.image_max_bytes)
+                ref = self.sink.archive(self.store, blob0, source="search",
+                                        group=group, member=member, mime=mime0)
+                if ref:
+                    cand["url"] = ref
+            except Exception as exc:
+                print(f"[sink] 找图归档失败: {exc}", flush=True)
 
         st = None
         first_err = ""
@@ -337,6 +366,9 @@ class ChatEngine:
         if images and self.cfg.vision_chat_enabled:
             try:
                 blob, mime = fetch_image(images[0]["url"], self.cfg.vision_max_bytes)
+                if self.sink.ok:
+                    self.sink.archive(self.store, blob, source="vision",
+                                      group=group, member=member, mime=mime)
                 messages.append({"role": "user", "content": [
                     {"type": "text", "text": question or "看看这张图，说说图上是什么"},
                     image_block(blob, mime),

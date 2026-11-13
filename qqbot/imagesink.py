@@ -151,7 +151,11 @@ class ImageSink:
         try:
             data = self.upload(blob, filename=filename, mime=mime)
         except SinkError as exc:
-            print(f"[sink] 上传失败: {exc}", flush=True)
+            hint = ""
+            msg = str(exc)
+            if any(k in msg for k in ("CERTIFICATE", "certificate", "TLS", "SSL")):
+                hint = "（证书链异常：可临时在 [storage] 配 resolve_ip 直连源站，或修图床证书链）"
+            print(f"[sink] 上传失败: {exc}{hint}", flush=True)
             return None
 
         url = data.get("url")

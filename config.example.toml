@@ -116,8 +116,6 @@ enabled = true
 base_url = "https://img.oddpp.com/api/v1"
 token = ""
 timeout = 30
-# 可选：图床走 CDN 且证书链不完整时，直连源站 IP（证书仍按域名校验）
-resolve_ip = ""
 
 [message]
 # 官方标签，纯文本 "@全体成员" 只会显示灰字、不触发提醒

@@ -841,7 +841,10 @@ class _Handler(BaseHTTPRequestHandler):
             if not p.cfg.panel_password:
                 self._json({"ok": False, "error": "未设置 panel.password，拒绝登录"}, 503)
                 return
-            if not hmac.compare_digest(str(body.get("password", "")), p.cfg.panel_password):
+            given = str(body.get("password", "")).strip()
+            # 按字节比较：str 版在遇到非 ASCII 密码时会抛 TypeError
+            if not hmac.compare_digest(given.encode("utf-8"),
+                                       p.cfg.panel_password.encode("utf-8")):
                 self._json({"ok": False, "error": "密码错误"}, 403)
                 return
             cookie = (f"qqbot_sid={p.issue()}; Path=/panel; HttpOnly; "
@@ -998,8 +1001,9 @@ class _Handler(BaseHTTPRequestHandler):
 
         if path == "/panel/api/settings/password":
             body = self._body()
-            old, new = str(body.get("old") or ""), str(body.get("new") or "")
-            if not hmac.compare_digest(old, p.cfg.panel_password):
+            old, new = str(body.get("old") or "").strip(), str(body.get("new") or "").strip()
+            if not hmac.compare_digest(old.encode("utf-8"),
+                                       p.cfg.panel_password.encode("utf-8")):
                 self._json({"ok": False, "error": "原密码不正确"}, 403)
                 return
             if len(new) < 6:

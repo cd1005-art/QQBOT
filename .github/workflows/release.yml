@@ -19,6 +19,7 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           mkdir -p dist
           tar -czf "dist/qqbot-${VERSION}.tar.gz" \
+            --exclude='dist' --exclude='.release-test' \
             --exclude='.git' --exclude='.github' --exclude='.workbuddy' \
             --exclude='promo' --exclude='data' --exclude='config.toml' \
             --exclude='__pycache__' --exclude='*.pyc' --exclude='.venv*' \

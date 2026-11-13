@@ -52,6 +52,7 @@ th{color:var(--muted);font-weight:500}
   <div class="t">开始</div>
   <a href="#intro">它是什么</a>
   <a href="#quick">快速开始</a>
+  <a href="#entity">主体类型与权限</a>
   <a href="#platform">平台配置</a>
   <div class="t" style="margin-top:14px">部署</div>
   <a href="#deploy">nginx / systemd</a>
@@ -95,6 +96,19 @@ python -m qqbot serve</pre>
   <p>访问 <code>http://127.0.0.1:18901/panel/</code>。若 <code>app_id</code> / <code>app_secret</code> / 面板密码任一为空，会自动进入初始化引导页。</p>
   <p>离线自检（不联网、不需凭证）：</p>
   <pre>python tests/smoke.py</pre>
+
+  <h2 id="entity">主体类型与权限</h2>
+  <p>个人主体与企业主体在<b>使用范围</b>上差异明显，功能代码无需改动。</p>
+  <table>
+    <tr><th>能力</th><th>个人主体</th><th>企业主体</th></tr>
+    <tr><td>群聊消息（全量）</td><td>✅ 仅自己管理的群</td><td>✅</td></tr>
+    <tr><td>公开使用（他人可添加）</td><td>❌</td><td>✅</td></tr>
+    <tr><td>单聊</td><td>⚠️ 仅开发体验用户</td><td>✅ 任意用户</td></tr>
+    <tr><td>撤回 / 禁言 / @全体</td><td>✅ 需为群管理员</td><td>✅</td></tr>
+    <tr><td>主动消息频控</td><td>10 qps（未认证 5 qps / 30 qpm）</td><td>10 qps</td></tr>
+    <tr><td>成员管理</td><td>❌</td><td>❌ 需平台内邀</td></tr>
+  </table>
+  <div class="warn">个人主体适合自用与开发测试；想对外提供使用必须企业主体。</div>
 
   <h2 id="platform">平台配置</h2>
   <table>

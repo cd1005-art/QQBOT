@@ -218,6 +218,7 @@ journalctl -u qqbot -f</pre>
     <tr><td><code>enabled</code></td><td>默认 true；未配 token 或 base_url 时自动不生效</td></tr>
     <tr><td><code>base_url</code></td><td>图床 API 根地址，如 <code>https://img.oddpp.com/api/v1</code></td></tr>
     <tr><td><code>token</code></td><td>图床生成的 API Token</td></tr>
+    <tr><td><code>resolve_ip</code></td><td>可选。CDN 证书链不完整时直连源站 IP，证书仍按域名校验</td></tr>
   </table>
   <div class="tip">同一张图按 sha256 只上传一次；发送走图床直链可显著降低腾讯侧转存失败率。</div>
 

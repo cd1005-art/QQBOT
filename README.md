@@ -334,6 +334,13 @@ timeout = 30
 ```
 
 - 协议：`POST {base_url}/upload`，请求头 `X-API-TOKEN`，multipart 字段 `file`
+- 图床走 CDN 且 CDN 下发的证书链不完整时，可加 `resolve_ip` 直连源站，证书仍按域名校验：
+
+  ```toml
+  [storage]
+  base_url = "https://img.oddpp.com/api/v1"
+  resolve_ip = "1.2.3.4"   # 可选，留空走 DNS
+  ```
 - 本地按 sha256 去重，同一张图只传一次；服务端也有秒传复用
 - 归档记录写在 `image_archive` 表，面板「规则 → 图片识别 → 图片归档」可看总数与最近记录
 - **发送改用图床直链**：腾讯侧转存成功率明显高于原始图源（图源常有防盗链，会报 40093007）

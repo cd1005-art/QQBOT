@@ -82,6 +82,7 @@ class Config:
     storage_base_url: str = "https://img.oddpp.com/api/v1"
     storage_token: str = ""
     storage_timeout: int = 30
+    storage_resolve_ip: str = ""
     # 文生图（与对话模型是两套接口，可共存）
     imagegen_enabled: bool = False
     imagegen_base_url: str = ""
@@ -193,6 +194,7 @@ def load(path: str | Path | None = None) -> Config:
         storage_base_url=str(storage.get("base_url", "https://img.oddpp.com/api/v1")),
         storage_token=str(storage.get("token", "")),
         storage_timeout=int(storage.get("timeout", 30)),
+        storage_resolve_ip=str(storage.get("resolve_ip", "")),
         imagegen_enabled=bool(imagegen.get("enabled", False)),
         imagegen_base_url=str(imagegen.get("base_url", "")),
         imagegen_api_key=str(imagegen.get("api_key", "")),

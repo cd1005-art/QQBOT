@@ -1,0 +1,31 @@
+name: docker
+
+on:
+  push:
+    tags: ["v*"]
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 登录 GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: 构建并推送
+        run: |
+          set -e
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
+          TAGS="-t ${IMAGE}:latest -t ${IMAGE}:sha-${GITHUB_SHA::7}"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            TAGS="${TAGS} -t ${IMAGE}:${GITHUB_REF_NAME}"
+          fi
+          docker build ${TAGS} .
+          docker push --all-tags "${IMAGE}"

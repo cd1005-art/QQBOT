@@ -27,3 +27,6 @@ Thumbs.db
 
 # 宣传片产出（不入库，体积大）
 promo/
+
+# 本地产出
+.release-test/

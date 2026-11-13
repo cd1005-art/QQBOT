@@ -3,6 +3,8 @@
 <p align="center">
   <a href="https://qm.qq.com/cgi-bin/qm/qr?k=&jump_from=webapi&group_code=556269215">
     <img src="https://img.shields.io/badge/QQ%E7%BE%A4-556269215-12B7F5?style=for-the-badge&logo=tencentqq&logoColor=white" alt="QQ群 556269215"></a>
+  <a href="https://github.com/cd1005-art/QQBOT/releases/latest">
+    <img src="https://img.shields.io/github/v/release/cd1005-art/QQBOT?style=for-the-badge" alt="Release"></a>
   <a href="https://github.com/cd1005-art/QQBOT/stargazers">
     <img src="https://img.shields.io/github/stars/cd1005-art/QQBOT?style=for-the-badge&logo=github" alt="Stars"></a>
 </p>
@@ -57,9 +59,32 @@ QQ 平台 --HTTPS POST--> https://你的域名/qqbot/webhook
 
 ## 快速开始
 
+### 一键安装（推荐）
+
 ```bash
-git clone https://github.com/<you>/qqbot.git
-cd qqbot
+wget https://github.com/cd1005-art/QQBOT/releases/latest/download/qqbot.tar.gz
+tar -xzf qqbot.tar.gz -C qqbot && cd qqbot
+sudo bash install.sh
+```
+
+脚本会完成：检查 Python 3.9+ → 建 venv → 装依赖 → 生成 `config.toml` → 注册并启动 systemd 服务。
+
+常用参数：
+
+```bash
+bash install.sh --check                 # 只体检，不改任何文件
+bash install.sh --dir ~/qqbot           # 装到自定义目录
+bash install.sh --no-service            # 只准备环境，不装服务
+bash install.sh --pip-index https://mirrors.aliyun.com/pypi/simple/   # 国内加速
+```
+
+升级时重跑同一条命令即可，`config.toml` 与 `data/` 不会被覆盖。
+
+### 手动安装
+
+```bash
+git clone https://github.com/cd1005-art/QQBOT.git
+cd QQBOT
 python -m pip install -r requirements.txt
 cp config.example.toml config.toml   # 填 app_id / app_secret / panel.password
 python tests/smoke.py                # 离线自检

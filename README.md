@@ -76,7 +76,13 @@ bash install.sh --check                 # 只体检，不改任何文件
 bash install.sh --dir ~/qqbot           # 装到自定义目录
 bash install.sh --no-service            # 只准备环境，不装服务
 bash install.sh --pip-index https://mirrors.aliyun.com/pypi/simple/   # 国内加速
+bash install.sh --upgrade               # 升级：自动备份，失败自动回滚
+bash install.sh --restore <备份目录>     # 回滚；目录可省略，会从备份路径推断
+bash install.sh --service-name qqbot2   # 同机多实例时给服务改名
 ```
+
+升级前会自动把当前代码、`config.toml`、`data/qqbot.db` 打包到 `<安装目录>/.backup/<时间戳>/`，
+依赖安装失败或启动后健康检查不通过，会自动回滚并重启旧版本；只保留最近 5 份备份。
 
 升级时重跑同一条命令即可，`config.toml` 与 `data/` 不会被覆盖。
 
@@ -132,6 +138,24 @@ QQ 开放平台把开发者分为个人主体与企业主体，两者在**使用
 保存回调地址时平台会立刻发 `op=13` 校验，服务没起来就保存失败。
 
 ## Docker
+
+**直接拉现成镜像（推荐）**
+
+```bash
+docker pull ghcr.io/cd1005-art/qqbot:latest
+
+docker run -d --name qqbot \
+  -p 127.0.0.1:18900:18900 -p 127.0.0.1:18901:18901 \
+  -v ./config:/app/config -v ./data:/app/data \
+  -e QQBOT_APP_ID=你的AppID \
+  -e QQBOT_APP_SECRET=你的AppSecret \
+  -e QQBOT_PANEL_PASSWORD=面板密码 \
+  ghcr.io/cd1005-art/qqbot:latest
+```
+
+标签：`latest`、版本号（如 `v1.0.0`）、`sha-<短哈希>`。镜像为 linux/amd64，公开无需登录。
+
+**本地构建**
 
 ```bash
 docker compose up -d

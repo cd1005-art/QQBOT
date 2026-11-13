@@ -5,6 +5,8 @@
 #   bash install.sh --dir ~/qqbot          # 装到指定目录
 #   bash install.sh --no-service           # 不装系统服务，只准备环境
 #   bash install.sh --check                # 只检查环境，不改任何文件
+#   bash install.sh --upgrade              # 升级：自动备份，失败自动回滚
+#   bash install.sh --restore <备份目录>    # 手动回滚到指定备份
 #
 # 升级时重跑即可：config.toml 与 data/ 不会被覆盖。
 
@@ -17,6 +19,10 @@ PORT_PANEL=${QQBOT_PORT_PANEL:-18901}
 NO_SERVICE=0
 CHECK_ONLY=0
 PORTS_EXPLICIT=0
+UPGRADE=0
+RESTORE_FROM=""
+SVC_NAME=${QQBOT_SERVICE:-qqbot}
+DIR_EXPLICIT=0
 PIP_INDEX=${QQBOT_PIP_INDEX:-}
 
 c_info()  { printf '\033[36m==>\033[0m %s\n' "$*"; }
@@ -32,19 +38,115 @@ usage() {
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --dir)          APP_DIR="$2"; shift 2 ;;
+    --dir)          APP_DIR="$2"; DIR_EXPLICIT=1; shift 2 ;;
     --user)         SVC_USER="$2"; shift 2 ;;
     --port-webhook) PORT_WEBHOOK="$2"; PORTS_EXPLICIT=1; shift 2 ;;
     --port-panel)   PORT_PANEL="$2"; PORTS_EXPLICIT=1; shift 2 ;;
     --pip-index)    PIP_INDEX="$2"; shift 2 ;;
     --no-service)   NO_SERVICE=1; shift ;;
     --check)        CHECK_ONLY=1; shift ;;
+    --upgrade)      UPGRADE=1; shift ;;
+    --restore)      RESTORE_FROM="$2"; shift 2 ;;
+    --service-name) SVC_NAME="$2"; shift 2 ;;
     -h|--help)      usage ;;
     *)              die "未知参数: $1（用 --help 查看用法）" ;;
   esac
 done
 
 SRC_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+
+# ---------------- 文件同步 ----------------
+
+copy_tree() {
+  local src="$1" dst="$2"
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a --delete "$src" "$dst"
+  else
+    rm -rf "$dst"
+    cp -a "$src" "$dst"
+  fi
+}
+
+sync_code() {
+  local d f
+  for d in qqbot web deploy docker; do
+    [[ -d "$SRC_DIR/$d" ]] && copy_tree "$SRC_DIR/$d/" "$APP_DIR/$d/"
+  done
+  for f in requirements.txt config.example.toml README.md LICENSE Dockerfile docker-compose.yml; do
+    [[ -f "$SRC_DIR/$f" ]] && cp -f "$SRC_DIR/$f" "$APP_DIR/$f"
+  done
+}
+
+# ---------------- 备份 / 回滚 ----------------
+
+BACKUP_ROOT_DEFAULT() { echo "$APP_DIR/.backup"; }
+
+make_backup() {
+  local bk="$1"
+  mkdir -p "$bk"
+  # 代码与配置
+  tar -czf "$bk/code.tar.gz" -C "$APP_DIR" \
+    qqbot web deploy docker requirements.txt config.toml README.md 2>/dev/null || true
+  # 数据库（用 sqlite3 .backup 保证一致性，没有就用复制）
+  if [[ -f "$APP_DIR/data/qqbot.db" ]]; then
+    if command -v sqlite3 >/dev/null 2>&1; then
+      sqlite3 "$APP_DIR/data/qqbot.db" ".backup '$bk/qqbot.db'" 2>/dev/null \
+        || cp -a "$APP_DIR/data/qqbot.db" "$bk/qqbot.db"
+    else
+      cp -a "$APP_DIR/data/qqbot.db" "$bk/qqbot.db"
+    fi
+  fi
+  date '+%Y-%m-%d %H:%M:%S' > "$bk/CREATED"
+}
+
+prune_backups() {
+  local root; root=$(BACKUP_ROOT_DEFAULT)
+  [[ -d "$root" ]] || return 0
+  ls -1dt "$root"/*/ 2>/dev/null | tail -n +6 | while read -r d; do rm -rf "$d"; done
+}
+
+restore_backup() {
+  local bk="$1"
+  [[ -f "$bk/code.tar.gz" ]] || { c_err "备份不完整：$bk"; return 1; }
+  c_warn "回滚到 $bk"
+
+  # 恢复前先把当前状态存一份，避免「回滚本身出错」时无路可退
+  local safe
+  safe="$(BACKUP_ROOT_DEFAULT)/restore-$(date +%Y%m%d-%H%M%S)"
+  if [[ -d "$APP_DIR/qqbot" ]]; then
+    make_backup "$safe" >/dev/null 2>&1 && c_ok "已为当前状态创建安全备份：$safe"
+  fi
+
+  local had_svc=0
+  if unit_matches; then had_svc=1; systemctl stop "$SVC_NAME" >/dev/null 2>&1 || true; fi
+  rm -rf "$APP_DIR/qqbot" "$APP_DIR/web" "$APP_DIR/deploy" "$APP_DIR/docker"
+  tar -xzf "$bk/code.tar.gz" -C "$APP_DIR"
+  [[ -f "$bk/qqbot.db" ]] && cp -f "$bk/qqbot.db" "$APP_DIR/data/qqbot.db"
+  "$APP_DIR/venv/bin/pip" install -q -r "$APP_DIR/requirements.txt" >/dev/null 2>&1 || c_warn "旧依赖还原失败"
+  if [[ $had_svc -eq 1 ]]; then
+    systemctl start "$SVC_NAME" >/dev/null 2>&1 || true
+    c_ok "已回滚并启动"
+  else
+    c_ok "已回滚（服务未托管，无需启动）"
+  fi
+}
+
+unit_matches() {
+  command -v systemctl >/dev/null 2>&1 || return 1
+  local wd
+  wd=$(systemctl show -p WorkingDirectory --value "$SVC_NAME" 2>/dev/null || true)
+  [[ -n "$wd" && "$(readlink -f "$wd")" == "$(readlink -f "$APP_DIR")" ]]
+}
+
+wait_healthy() {
+  local port="$1" i
+  for i in $(seq 1 15); do
+    if curl -fsS -m 2 "http://127.0.0.1:${port}/qqbot/webhook" >/dev/null 2>&1; then return 0; fi
+    sleep 1
+  done
+  return 1
+}
 
 # ---------------- 1. 环境检查 ----------------
 
@@ -79,27 +181,95 @@ if [[ $CHECK_ONLY -eq 1 ]]; then
   exit 0
 fi
 
+if [[ -n "$RESTORE_FROM" ]]; then
+  [[ -d "$RESTORE_FROM" ]] || die "备份目录不存在：$RESTORE_FROM"
+  BK_REAL=$(readlink -f "$RESTORE_FROM")
+  [[ -f "$BK_REAL/code.tar.gz" ]] || die "不是有效备份（缺 code.tar.gz）：$BK_REAL"
+  BK_PARENT=$(basename "$(dirname "$BK_REAL")")
+  [[ "$BK_PARENT" == ".backup" ]] || die "备份应位于 <应用目录>/.backup/ 下：$BK_REAL"
+  OWNER_APP=$(dirname "$(dirname "$BK_REAL")")
+
+  if [[ $DIR_EXPLICIT -eq 1 ]]; then
+    [[ "$(readlink -f "$APP_DIR")" == "$OWNER_APP" ]] \
+      || die "--dir 与备份归属不一致：该备份属于 $OWNER_APP"
+  else
+    APP_DIR="$OWNER_APP"
+    c_info "由备份路径推断应用目录：$APP_DIR"
+  fi
+  restore_backup "$BK_REAL"
+  exit 0
+fi
+
+
+# ---------------- 升级模式 ----------------
+
+if [[ $UPGRADE -eq 1 ]]; then
+  c_info "升级模式"
+  [[ -d "$APP_DIR/qqbot" && -f "$APP_DIR/config.toml" ]] \
+    || die "目标目录没有已安装的 QQBOT（$APP_DIR），首次安装请去掉 --upgrade"
+
+  BK="$(BACKUP_ROOT_DEFAULT)/$(date +%Y%m%d-%H%M%S)"
+  c_info "备份当前版本 → $BK"
+  make_backup "$BK"
+  [[ -f "$BK/code.tar.gz" ]] || die "备份失败，已中止（未改动任何文件）"
+  c_ok "备份完成：代码 + 配置 + 数据库"
+
+  WAS_RUNNING=0
+  if unit_matches && systemctl is-active --quiet "$SVC_NAME" 2>/dev/null; then
+    WAS_RUNNING=1
+    systemctl stop "$SVC_NAME"
+    c_ok "服务已停止"
+  elif systemctl is-active --quiet "$SVC_NAME" 2>/dev/null; then
+    c_warn "检测到 $SVC_NAME 服务运行的是其它目录，本次不操作该服务"
+  fi
+
+  c_info "同步新版本"
+  sync_code
+  c_ok "文件已更新"
+
+  c_info "更新依赖"
+  UP_ARGS=(-q -r "$APP_DIR/requirements.txt")
+  [[ -n "$PIP_INDEX" ]] && UP_ARGS+=(-i "$PIP_INDEX")
+  if ! "$APP_DIR/venv/bin/pip" install "${UP_ARGS[@]}"; then
+    c_err "依赖安装失败，开始回滚"
+    restore_backup "$BK"
+    exit 1
+  fi
+  c_ok "依赖就绪"
+
+  # 端口沿用配置文件里的值，读回来做健康检查
+  HEALTH_PORT=$(grep -A3 '^\[webhook\]' "$APP_DIR/config.toml" | grep -m1 '^port' | tr -dc '0-9')
+  HEALTH_PORT=${HEALTH_PORT:-$PORT_WEBHOOK}
+
+  if [[ $WAS_RUNNING -eq 1 ]]; then
+    systemctl start "$SVC_NAME"
+    if wait_healthy "$HEALTH_PORT"; then
+      c_ok "服务已启动，健康检查通过（端口 $HEALTH_PORT）"
+    else
+      c_err "健康检查失败，自动回滚"
+      restore_backup "$BK"
+      c_warn "已恢复到升级前状态；备份保留在 $BK"
+      exit 1
+    fi
+  else
+    c_warn "服务原本未运行，跳过启动；可手动执行：systemctl start $SVC_NAME"
+  fi
+
+  prune_backups
+  c_ok "升级完成"
+  echo
+  echo "回滚命令（如需）："
+  echo "  sudo bash install.sh --restore $BK"
+  echo
+  exit 0
+fi
+
 # ---------------- 2. 拷贝文件 ----------------
 
 c_info "安装文件到 $APP_DIR"
 mkdir -p "$APP_DIR" "$APP_DIR/data"
 
-copy_tree() {
-  local src="$1" dst="$2"
-  if command -v rsync >/dev/null 2>&1; then
-    rsync -a --delete "$src" "$dst"
-  else
-    rm -rf "$dst"
-    cp -a "$src" "$dst"
-  fi
-}
-
-for d in qqbot web deploy docker; do
-  [[ -d "$SRC_DIR/$d" ]] && copy_tree "$SRC_DIR/$d/" "$APP_DIR/$d/"
-done
-for f in requirements.txt config.example.toml README.md LICENSE Dockerfile docker-compose.yml; do
-  [[ -f "$SRC_DIR/$f" ]] && cp -f "$SRC_DIR/$f" "$APP_DIR/$f"
-done
+sync_code
 c_ok "代码已同步（data/ 与 config.toml 保留）"
 
 # ---------------- 3. 依赖 ----------------
@@ -155,7 +325,7 @@ if [[ $HAS_SYSTEMD -eq 1 ]]; then
     chown -R "$SVC_USER:$SVC_USER" "$APP_DIR" 2>/dev/null || true
     chmod 600 "$APP_DIR/config.toml"
 
-    cat > /etc/systemd/system/qqbot.service <<UNIT
+    cat > "/etc/systemd/system/${SVC_NAME}.service" <<UNIT
 [Unit]
 Description=QQ Bot Webhook Receiver
 After=network-online.target
@@ -177,8 +347,9 @@ StandardError=journal
 WantedBy=multi-user.target
 UNIT
     systemctl daemon-reload
-    systemctl enable --now qqbot >/dev/null 2>&1 || c_warn "服务启动失败，查 journalctl -u qqbot"
-    c_ok "已注册并启动 qqbot.service"
+    systemctl enable --now "$SVC_NAME" >/dev/null 2>&1 \
+      || c_warn "服务启动失败，查 journalctl -u $SVC_NAME"
+    c_ok "已注册并启动 ${SVC_NAME}.service"
   fi
 fi
 

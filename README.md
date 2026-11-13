@@ -334,7 +334,8 @@ timeout = 30
 ```
 
 - 协议：`POST {base_url}/upload`，请求头 `X-API-TOKEN`，multipart 字段 `file`
-- 图床走 CDN 且 CDN 下发的证书链不完整时，可加 `resolve_ip` 直连源站，证书仍按域名校验：
+- `resolve_ip` 是应急项，默认留空。若图床走 CDN 且证书链不完整（典型症状：浏览器能开、脚本报
+  `unable to get local issuer certificate`），可临时直连源站，证书仍按域名校验：
 
   ```toml
   [storage]

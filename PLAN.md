@@ -327,3 +327,5 @@ keep_local = false      # 是否同时落盘一份
 
 - 图床 `https://img.oddpp.com` 就绪，QQBOT 侧四个触发点全部接入并实测
 - 图床走 CDN 时下发证书链不完整，新增 `[storage] resolve_ip` 直连源站，TLS 仍按域名校验
+- 2026-11-14 00:30 复查：证书续期后 CDN 节点已补全链路，DNS 直连 5/5 通过，
+  生产配置移除 `resolve_ip`；该字段保留为应急开关（默认空）

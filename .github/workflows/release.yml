@@ -33,25 +33,26 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -e
           VERSION="${GITHUB_REF_NAME#v}"
-          NOTES=$(cat <<EOF
-          QQBOT ${GITHUB_REF_NAME}
-
-          ### 安装
-          \`\`\`bash
-          tar -xzf qqbot-${VERSION}.tar.gz -C qqbot && cd qqbot
-          bash install.sh              # 装到 /opt/qqbot 并注册 systemd
-          bash install.sh --check      # 只检查环境
-          \`\`\`
-
-          升级时重跑 install.sh 即可，config.toml 与 data/ 不会被覆盖。
-
-          ### 校验
-          \`\`\`bash
-          sha256sum -c qqbot-${VERSION}.tar.gz.sha256
-          \`\`\`
-          EOF
-          )
+          {
+            echo "QQBOT ${GITHUB_REF_NAME}"
+            echo
+            echo "### 安装"
+            echo '```bash'
+            echo "tar -xzf qqbot-${VERSION}.tar.gz -C qqbot && cd qqbot"
+            echo "sudo bash install.sh"
+            echo '```'
+            echo
+            echo "只检查环境：\`bash install.sh --check\`；升级重跑同一命令，config.toml 与 data/ 不会被覆盖。"
+            echo
+            echo "### 校验"
+            echo '```bash'
+            echo "sha256sum -c SHA256SUMS"
+            echo '```'
+            echo
+            echo "镜像：\`docker pull ghcr.io/cd1005-art/qqbot:${GITHUB_REF_NAME}\`"
+          } > /tmp/notes.md
           gh release create "${GITHUB_REF_NAME}" dist/* \
             --title "QQBOT ${GITHUB_REF_NAME}" \
-            --notes "$NOTES"
+            --notes-file /tmp/notes.md

@@ -25,6 +25,19 @@ QQ 平台 --HTTPS POST--> https://你的域名/qqbot/webhook
 
 面板静态资源由 nginx 直接读站点目录，只有 `/panel/api/` 反代到 Python。
 
+## 环境要求
+
+| 项 | 要求 | 说明 |
+|---|---|---|
+| Docker 方式 | Docker 20.10+（含 compose v2） | **推荐**，不需要装 Python |
+| 源码方式 | **Python 3.9 及以上** | 3.6/3.7/3.8 不支持；CentOS 7 自带 3.6，需另装 |
+| 系统 | Linux（x86_64）/ macOS | Windows 建议走 Docker 或 WSL |
+| 数据库 | 不需要 | SQLite 内嵌，数据就是 `data/qqbot.db` 一个文件 |
+| 内存 | 256 MB 起 | 开启对话/审核/生图建议 512 MB 以上 |
+| 出网 | 443 可达 QQ 开放平台 | 用模型时另需访问对应 API |
+
+> Docker 方式不依赖宿主机 Python 版本，CentOS 7 这类老系统优先用它。
+
 ## 界面
 
 ![控制台总览](docs/shots/panel.png)

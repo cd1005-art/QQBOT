@@ -51,6 +51,7 @@ th{color:var(--muted);font-weight:500}
 <aside>
   <div class="t">开始</div>
   <a href="#intro">它是什么</a>
+  <a href="#req">环境要求</a>
   <a href="#quick">快速开始</a>
   <a href="#entity">主体类型与权限</a>
   <a href="#platform">平台配置</a>
@@ -86,6 +87,16 @@ th{color:var(--muted);font-weight:500}
     <li>后端纯 Python 标准库（仅验签依赖 PyNaCl，老版本 Python 另需 tomli）</li>
     <li>前端原生 JS，无构建、无 CDN</li>
   </ul>
+
+  <h2 id="req">环境要求</h2>
+  <table>
+    <tr><th>项</th><th>要求</th></tr>
+    <tr><td>Docker 方式</td><td>Docker 20.10+（含 compose v2），<b>不需要 Python</b></td></tr>
+    <tr><td>源码方式</td><td><b>Python 3.9 及以上</b>（3.6/3.7/3.8 不支持）</td></tr>
+    <tr><td>数据库</td><td>不需要，SQLite 内嵌，数据只有 data/qqbot.db 一个文件</td></tr>
+    <tr><td>内存</td><td>256 MB 起，开模型建议 512 MB 以上</td></tr>
+  </table>
+  <div class="tip">CentOS 7 自带 Python 3.6，跑源码会失败，优先用 Docker。</div>
 
   <h2 id="quick">快速开始</h2>
   <pre>git clone https://github.com/cd1005-art/QQBOT.git

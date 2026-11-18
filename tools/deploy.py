@@ -1,4 +1,10 @@
-"""部署到 Rocky9 服务器（192.168.5.48）：上传 → venv 依赖 → systemd → nginx 反代。
+"""【已停用】源码 + systemd 部署，目标 192.168.5.48。
+
+QQBOT 已迁到 192.168.5.17（Docker + 宝塔容器编排），日常更新请用：
+    python tools/deploy_docker.py
+
+保留本文件仅供查阅旧部署流程。
+原说明：部署到 Rocky9 服务器（192.168.5.48）：上传 → venv 依赖 → systemd → nginx 反代。
 
 用法：
   python tools/deploy.py            # 全量部署

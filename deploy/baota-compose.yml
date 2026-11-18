@@ -1,0 +1,24 @@
+# 宝塔面板「Docker → 容器编排 → 添加容器编排」直接粘贴本文件内容
+# 用途：只跑 QQBOT 后端；前端静态由站点根目录提供，nginx 需两条反代
+services:
+  qqbot:
+    image: ghcr.io/cd1005-art/qqbot:v1.0.3
+    container_name: qqbot
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      QQBOT_BIND: 0.0.0.0
+      QQBOT_CONFIG: /app/config/config.toml
+    # 只绑回环，公网入口统一走 nginx，避免面板 API 直接暴露
+    ports:
+      - "127.0.0.1:18900:18900"
+      - "127.0.0.1:18901:18901"
+    volumes:
+      - /opt/qqbot/config:/app/config
+      - /opt/qqbot/data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:18900/qqbot/webhook',timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

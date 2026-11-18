@@ -102,6 +102,92 @@ python -m qqbot serve                # 同时启动 webhook(18900) 与面板(189
 
 初始化完成后再调 `/panel/api/setup` 一律返回 403，防止远程改写凭证。
 
+## 宝塔面板部署
+
+宝塔用户有两种方式，区别只在**后端怎么常驻**。
+
+### 方式 A：Docker（推荐，镜像已发布）
+
+1. 拉镜像
+
+   ```bash
+   docker pull ghcr.io/cd1005-art/qqbot:v1.0.3
+   ```
+
+   也可以在宝塔「Docker → 线上镜像」里搜索 `ghcr.io/cd1005-art/qqbot` 拉取。
+
+2. 准备目录与文件
+
+   ```bash
+   mkdir -p /opt/qqbot/config /opt/qqbot/data
+   # 放入 config.toml 与 qqbot.db（新装可跳过，首次访问面板会引导填配置）
+   ```
+
+3. 宝塔「Docker → 容器编排 → 添加容器编排」
+
+   把 `deploy/baota-compose.yml` 的内容整段粘进 **compose 内容**框（**不是** 粘贴 `docker run` 命令，那是 shell 命令，compose 解析不了）。
+
+4. 站点 nginx 加两条反代（站点设置 → 配置文件）
+
+   ```nginx
+   location ^~ /qqbot/webhook {
+       proxy_pass http://127.0.0.1:18900;
+       proxy_set_header Host $host;
+       proxy_set_header X-Real-IP $remote_addr;
+       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+       proxy_set_header X-Forwarded-Proto $scheme;
+   }
+
+   location ^~ /panel/api/ {
+       proxy_pass http://127.0.0.1:18901;
+       proxy_set_header Host $host;
+       proxy_set_header X-Real-IP $remote_addr;
+       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+       proxy_set_header X-Forwarded-Proto $scheme;
+   }
+   ```
+
+5. 验证
+
+   ```bash
+   curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:18901/panel/     # 200
+   curl -s -o /dev/null -w "%{http_code}\n" https://你的域名/panel/            # 200
+   ```
+
+### 方式 B：进程守护管理器（不用 Docker）
+
+前提：**Python 3.9 及以上**。CentOS 7 自带 3.6，需先用宝塔「Python 项目管理器」装一个新版本。
+
+1. 代码放到站点目录，建虚拟环境
+
+   ```bash
+   cd /www/wwwroot/你的站点
+   python3.9 -m venv venv
+   ./venv/bin/pip install -r requirements.txt
+   ```
+
+2. 宝塔「软件商店 → 进程守护管理器 → 添加守护进程」
+
+   | 项 | 值 |
+   |---|---|
+   | 名称 | qqbot |
+   | 启动用户 | root |
+   | 运行目录 | `/www/wwwroot/你的站点` |
+   | 启动命令 | `/www/wwwroot/你的站点/venv/bin/python -m qqbot serve` |
+
+   环境变量可留空；如需指定配置路径，加 `QQBOT_CONFIG=/www/wwwroot/你的站点/config.toml`。
+
+3. nginx 反代同上。
+
+> 注意：后端代码放在网站根目录时，务必加拒绝规则，否则 `config.py`、`data/qqbot.db` 可被直接下载：
+>
+> ```nginx
+> location ^~ /qqbot/ { deny all; }   # 放在 webhook 反代之后
+> location ~* \.(py|toml|db)$ { deny all; }
+> ```
+>
+> 这也是推荐用 Docker 的原因——容器里跑，源码不进网站目录。
+
 ## 主体类型与权限差异
 
 QQ 开放平台把开发者分为个人主体与企业主体，两者在**使用范围**上差异明显，功能代码本身不需要改。

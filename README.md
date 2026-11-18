@@ -121,26 +121,44 @@ python -m qqbot serve                # 同时启动 webhook(18900) 与面板(189
 
 ### 方式 A：Docker（推荐，镜像已发布）
 
-1. 拉镜像
+**一次搞定，不用下载任何文件。**
 
-   ```bash
-   docker pull ghcr.io/cd1005-art/qqbot:v1.0.3
-   ```
-
-   也可以在宝塔「Docker → 线上镜像」里搜索 `ghcr.io/cd1005-art/qqbot` 拉取。
-
-2. 准备目录与文件
+1. 建目录（数据就放这里，容器删了也不丢）
 
    ```bash
    mkdir -p /opt/qqbot/config /opt/qqbot/data
-   # 放入 config.toml 与 qqbot.db（新装可跳过，首次访问面板会引导填配置）
    ```
 
-3. 宝塔「Docker → 容器编排 → 添加容器编排」
+2. 宝塔「Docker → 容器编排 → 添加容器编排」→ 名称填 `qqbot` → 来源选「编辑」→
+   把下面整段粘进 **compose 内容**框 → 确定：
 
-   把 `deploy/baota-compose.yml` 的内容整段粘进 **compose 内容**框（**不是** 粘贴 `docker run` 命令，那是 shell 命令，compose 解析不了）。
+   ```yaml
+   services:
+     qqbot:
+       image: ghcr.io/cd1005-art/qqbot:latest
+       container_name: qqbot
+       restart: unless-stopped
+       environment:
+         TZ: Asia/Shanghai
+         QQBOT_BIND: 0.0.0.0
+         QQBOT_CONFIG: /app/config/config.toml
+       ports:
+         - "127.0.0.1:18900:18900"
+         - "127.0.0.1:18901:18901"
+       volumes:
+         - /opt/qqbot/config:/app/config
+         - /opt/qqbot/data:/app/data
+       healthcheck:
+         test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:18900/qqbot/webhook',timeout=3).status==200 else 1)"]
+         interval: 30s
+         timeout: 5s
+         retries: 3
+         start_period: 10s
+   ```
 
-4. 站点 nginx 加两条反代（站点设置 → 配置文件）
+   不要粘贴 `docker run ...` 命令，那个是 shell 命令，compose 解析不了。
+
+3. 站点 nginx 加两条反代（站点设置 → 配置文件，加到 `server {}` 内）
 
    ```nginx
    location ^~ /qqbot/webhook {
@@ -160,12 +178,23 @@ python -m qqbot serve                # 同时启动 webhook(18900) 与面板(189
    }
    ```
 
-5. 验证
+4. 验证
 
    ```bash
-   curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:18901/panel/     # 200
-   curl -s -o /dev/null -w "%{http_code}\n" https://你的域名/panel/            # 200
+   curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:18901/panel/   # 200
+   curl -s -o /dev/null -w "%{http_code}\n" https://你的域名/panel/          # 200
    ```
+
+**数据在哪**：全部在宿主机 `/opt/qqbot/data/qqbot.db` 一个文件里，容器内 `/app/data` 是它的挂载点。
+备份就是拷这个文件；升级、删容器都不影响它。
+
+**怎么更新**：镜像用的是 `latest`，有新版本时执行
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+宝塔容器编排页面也可以点「重新部署」。想固定版本就把 `latest` 换成具体 tag（如 `v1.0.3`）。
 
 ### 方式 B：进程守护管理器（不用 Docker）
 

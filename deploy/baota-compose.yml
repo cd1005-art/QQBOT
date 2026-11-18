@@ -2,7 +2,7 @@
 # 用途：只跑 QQBOT 后端；前端静态由站点根目录提供，nginx 需两条反代
 services:
   qqbot:
-    image: ghcr.io/cd1005-art/qqbot:v1.0.3
+    image: ghcr.io/cd1005-art/qqbot:latest   # 想锁版本就把 latest 换成 v1.0.3
     container_name: qqbot
     restart: unless-stopped
     environment:
